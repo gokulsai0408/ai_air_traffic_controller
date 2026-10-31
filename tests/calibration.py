@@ -1,5 +1,5 @@
 """python -m tests.calibration [flights.csv] [airports.csv] : generator calibration numbers.
-Defaults to the HAND-MADE sample. Re-run on the real files. Uses the approximate check in helpers.py."""
+Defaults to the HAND-MADE sample. Re-run on the real files. Uses the real kernel."""
 import sys
 import time
 
