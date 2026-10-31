@@ -1,7 +1,8 @@
-# Owner: Person B. Safety thresholds live ONLY here; no text channel may modify them.
+# Constraint register (BUILD_PLAN 5.3). The ONLY source of kernel thresholds.
+# No text channel (ops notes, rationales) can modify this file.
 C-SCHEMA-01:
   class: PHYSICAL
-  description: Message validates against schema; fields consistent with action_type
+  description: Message validates against the schema; fields consistent with action_type
   params: {}
   source: "Design"
   tag: ASSUMED_CONST
@@ -19,56 +20,67 @@ C-CONSIST-01:
   tag: ASSUMED_CONST
 C-RWY-01:
   class: SAFETY
-  description: Slot is free and within the arrival-rate grid
+  description: Slot is free (no double-booking) and within the arrival-rate grid
   params: {}
-  source: "ATC procedure (simplified); arrival rate ASSUMED"
+  source: "ATC procedure (simplified, ASSUMED rate)"
   tag: ASSUMED_CONST
 C-WAKE-01:
   class: SAFETY
-  description: Gap to leader and follower >= wake minimum
+  description: Time gap to leading and following landings >= wake minimum for the pair
   params:
-    approach_speed_kt: 140
-    # (leader, follower) -> NM; default 3 NM
-    pairs_nm: { "H-H": 4, "H-M": 5, "H-L": 6, "M-L": 5, "J-H": 6, "J-M": 7, "J-L": 8 }
+    approach_speed_kt: 140   # ASSUMED; 3 NM = 1.29 min, 4 = 1.71, 5 = 2.14, 6 = 2.57
     default_nm: 3
-  source: "ICAO Doc 4444 (simplified), converted at 140 kt (ASSUMED)"
+    pairs_nm:                      # leader-follower; any pair not listed uses default_nm
+      H-H: 4
+      H-M: 5
+      H-L: 6
+      M-L: 5
+      J-H: 6
+      J-M: 7
+      J-L: 8
+  source: "ICAO Doc 4444 wake distances (simplified), converted at 140 kt (ASSUMED)"
   tag: REAL
 C-FUEL-01:
   class: SAFETY
-  description: Fuel at landing >= final reserve + alternate
-  params: { final_reserve_min: 45 }
-  source: "FAA 14 CFR 121.639 (domestic); ICAO Annex 6 uses 30 min"
-  tag: REAL   # the rule is real; the aircraft's fuel state is SYNTHETIC
+  description: Fuel at landing >= final reserve + alternate, i.e. extra_fuel_min - hold_minutes >= 0
+  params: { min_margin_min: 0 }
+  # Reference only, never read by code. extra_fuel_min is already fuel ABOVE the reserve,
+  # so subtracting this again would double-count it.
+  reference: { final_reserve_min: 45 }
+  source: "FAA 14 CFR 121.639 (45-min domestic reserve, the rule we use); ICAO Annex 6 uses 30 min"
+  tag: REAL           # the rule is real; the aircraft's fuel state is SYNTHETIC
 C-FUEL-02:
   class: SAFETY
-  description: For DIVERT, fuel above final reserve >= time to alternate (+ hold so far)
-  params: {}
-  source: "FAA 14 CFR 121.639"
-  tag: REAL
+  description: For DIVERT, fuel above final reserve >= time to alternate + hold so far
+  params: { min_margin_min: 0 }
+  # Reference only, never read by code. derive()'s margin is already measured above the reserve.
+  reference: { final_reserve_min: 45 }
+  source: "FAA 14 CFR 121.639 (45-min domestic reserve, the rule we use); ICAO Annex 6 uses 30 min"
+  tag: REAL           # the rule is real; the aircraft's fuel state is SYNTHETIC
 C-CREW-01:
   class: SAFETY
   description: On-block time <= crew FDP end
-  params: {}
+  params: { min_margin_min: 0 }
   source: "FAA 14 CFR Part 117 (FDP end is SYNTHETIC)"
   tag: REAL
 C-GATE-01:
   class: PHYSICAL
   description: Gate size class >= aircraft class
   params: {}
-  source: "Design (classes ASSUMED)"
+  source: "Design (ASSUMED classes)"
   tag: ASSUMED_CONST
 C-GATE-02:
   class: PHYSICAL
-  description: No overlap with other gate occupancy (with buffer)
-  params: { buffer_min: 10 }
+  description: No overlap with other occupancy, including the buffer
+  params: { buffer_min: 10 }   # applied by world.derive() when computing gate_overlap_min
   source: "ASSUMED buffer"
   tag: ASSUMED_CONST
 C-TAXI-01:
   class: PHYSICAL
-  description: Gate reachable given taxiway closures parsed from ops notes (tighten-only)
+  description: Gate reachable given taxiway closures and unavailable gates (tighten-only)
   params: {}
   source: "Ops notes"
-  tag: SYNTHETIC
+  tag: SYNTHETIC   # the rule is design; the closures come from SYNTHETIC ops notes
 C-POL-OT-01:
   class: POLICY
   description: Ground overtime <= cap
