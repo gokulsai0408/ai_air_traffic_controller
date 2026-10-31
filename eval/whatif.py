@@ -41,6 +41,7 @@ SYNTHETIC_SLIDERS = (
     Slider("connecting_pax_fraction", "Share of passengers connecting", 0.0, 1.0, 0.05,
            ("pilot.connecting_pax", "pilot.connections")),
     Slider("extra_fuel_min", "Holding fuel above reserve (min)", 0, 60, 1, ("pilot.extra_fuel_min",)),
+    Slider("fdp_end_after_eta_min", "Crew duty ends after ETA (min)", 0, 300, 5, ("pilot.fdp_end_min",)),
     Slider("slot_occupancy", "Share of runway slots already taken", 0.0, 0.95, 0.05, ("atc.slots",)),
 )
 COST_SLIDERS = (
@@ -57,6 +58,12 @@ COST_SLIDERS = (
 )
 PRESETS = {
     "Tight ramp shift [10, 60] (shows escalation)": {"synthetic": {"shift_end_after_eta_min": [10, 60]}, "costs": {}},
+    "Runway capacity cut (thunderstorm)": {"synthetic": {"slot_occupancy": [0.85, 0.95]}, "costs": {}},
+    "Crew near duty limit, low fuel, full runway (shows DECLINE)": {
+        "synthetic": {"extra_fuel_min": [0, 2], "slot_occupancy": [0.9, 0.95], "fdp_end_after_eta_min": [10, 30]},
+        "costs": {}},
+    "Connections far apart (gate choice matters)": {"synthetic": {"transfer_min.far": 30, "transfer_min.adjacent": 18},
+                                                    "costs": {"cost_per_missed_pax": 600.0}},
 }
 
 

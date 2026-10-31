@@ -121,6 +121,17 @@ def logged_max_rounds(entries: list[dict]) -> Optional[int]:
     return int(value) if value is not None else None
 
 
+OPS_NOTE_ENTRY = "OPS_NOTE_ADDED"
+NO_NOTES = "No significant ops notes."
+
+
+def with_ops_note(world, note: str):
+    """World copy whose public ops notes include the duty manager's note. Nothing else changes."""
+    base = world.public.ops_notes.strip()
+    text = note.strip() if base in ("", NO_NOTES) else f"{base} {note.strip()}"
+    return world.model_copy(update={"public": world.public.model_copy(update={"ops_notes": text})})
+
+
 def kernel_world(world, entries: list[dict]):
     """The world the kernel checked against: the agents' ops facts applied (tighten-only)."""
     from cdm.kernel import apply_facts
@@ -164,8 +175,10 @@ def pool_metrics(pool: list, world) -> dict:
 
 def run_scenario(row: pd.Series, seed: int, agent_kind: str, cfg: integration.RunCfg, ledger_dir: Path,
                  single_prompt: bool = False, what_if: Optional[dict] = None,
-                 ledger_name: Optional[str] = None) -> dict:
-    """`what_if` = dashboard overrides already applied to `cfg`; they are logged before the negotiation."""
+                 ledger_name: Optional[str] = None, ops_note: Optional[str] = None) -> dict:
+    """`what_if` = dashboard overrides already applied to `cfg`; they are logged before the negotiation.
+    `ops_note` = free text the duty manager adds to the ops notes (a disruption, or an injection test). The
+    agents read it like any other note; their extracted facts can only tighten the kernel."""
     from cdm.baseline_single_prompt import SinglePromptFailure, single_prompt_plan
     from cdm.coordinator import negotiate
     from cdm.fallback import fallback_plan
@@ -188,6 +201,11 @@ def run_scenario(row: pd.Series, seed: int, agent_kind: str, cfg: integration.Ru
     if what_if:
         from eval.whatif import WHAT_IF_ENTRY, ledger_payload
         ledger.append(WHAT_IF_ENTRY, "duty_manager", ledger_payload(what_if))
+    if ops_note and ops_note.strip():
+        world = with_ops_note(world, ops_note)
+        ledger.append(OPS_NOTE_ENTRY, "duty_manager", {"note": ops_note.strip(), "ops_notes_seen": world.public.ops_notes,
+                                                       "tag": "SYNTHETIC", "detail": "Added on the dashboard; untrusted "
+                                                       "text, read by the agents, can only tighten the kernel."})
     started = time.perf_counter()
     decision = negotiate(world, integration.make_agents(agent_kind, seed), cfg.negotiation(world), ledger)
     record["latency_s"] = time.perf_counter() - started

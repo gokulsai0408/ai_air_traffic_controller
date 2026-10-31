@@ -32,7 +32,7 @@ COST_NOTE = "Costs are modelled with config/costs.yaml constants: delay and fuel
 
 
 def _ok(batch: pd.DataFrame) -> pd.DataFrame:
-    return batch[batch["error"].fillna("") == ""]
+    return batch[batch["error"].isna() | (batch["error"].astype(str) == "")]
 
 
 def _true(series: pd.Series) -> pd.Series:
