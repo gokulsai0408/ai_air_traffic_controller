@@ -1,0 +1,43 @@
+# Owner: Person A. Generator ranges; all outputs tagged SYNTHETIC / ASSUMED_CONST.
+# The ground-overtime cap lives in constraints.yaml (C-POL-OT-01), not here.
+decision_lead_min: 45            # T0 = ETA - 45 min
+aar_weather_per_hour: 30
+slot_window_min: [-10, 60]       # relative to ETA
+slot_occupancy: [0.60, 0.75]
+wake_mix: { M: 0.80, H: 0.18, J: 0.02 }
+extra_fuel_min: [8, 35]          # holding fuel above final reserve + alternate
+fdp_end_after_eta_min: [30, 180]
+gates: [8, 12]
+gate_size_mix: { regional: 0.25, narrowbody: 0.55, widebody: 0.20 }
+gate_busy_intervals: [2, 4]
+gate_busy_length_min: [30, 70]
+taxiways: [A, B, C, D]
+original_gate_conflict_prob: 0.60
+shift_end_after_eta_min: [40, 240]
+next_departure_after_eta_min: [50, 150]   # only when the real next leg isn't in the file
+seats: { regional: 70, narrowbody: 160, widebody: 280 }
+connecting_pax_fraction: [0.25, 0.45]
+connection_banks: [4, 8]
+connection_dep_after_eta_min: [20, 150]
+concourses: [2, 3]               # contact gates are spread over this many neighbouring concourses
+transfer_min:                    # gate to connecting flight, on top of the 45-min minimum connection time
+  same: [3, 7]
+  adjacent: [8, 12]
+  far: [13, 17]                  # two concourses apart
+  remote_bus: [12, 18]           # REMOTE-1: bus to the terminal, then the same-concourse walk
+default_taxi_in_min: 8           # only when TAXI_IN is missing
+widebody_distance_threshold: 2000
+alternates: { count: [2, 3], min_distance_nm: 50, speed_kt: 300, approach_min: 10 }
+ops_notes:
+  taxiway_closure_prob: 0.35
+  taxiway_closure_until_after_eta_min: [20, 90]
+  gate_unavailable_prob: 0.10
+  turbulence_prob: 0.30
+  runway_config_change_prob: 0.10
+# Stress worlds force the escalation paths the plan requires us to demonstrate.
+# Their share of worlds is a design choice, NOT a real-world rate. Don't report it as one.
+stress:
+  prob: 0.20
+  fuel_share: 0.25              # of stress worlds: runway backlog exceeds fuel (expect DECLINE)
+  fuel_extra_min: [8, 12]       # the rest: overtime above the cap (expect POLICY_RELAXATION)
+  overtime_above_cap_min: [5, 20]

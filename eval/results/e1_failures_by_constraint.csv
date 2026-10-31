@@ -1,0 +1,18 @@
+# unsafe_accepted = decisions failing a SAFETY or PHYSICAL constraint on re-check.
+agent_kind,constraint_id,failures,label
+adversarial,C-CONSIST-01,104,measured
+adversarial,C-CREW-01,5,measured
+adversarial,C-FUEL-01,73,measured
+adversarial,C-GATE-02,45,measured
+adversarial,C-POL-OT-01,28,measured
+adversarial,C-REF-01,675,measured
+adversarial,C-SCHEMA-01,1196,measured
+adversarial,C-TAXI-01,9,measured
+adversarial,C-WAKE-01,25,measured
+random,C-CONSIST-01,9,measured
+random,C-FUEL-01,4,measured
+random,C-GATE-02,2,measured
+random,C-POL-OT-01,1,measured
+random,C-REF-01,1073,measured
+random,C-SCHEMA-01,3388,measured
+random,C-TAXI-01,2,measured

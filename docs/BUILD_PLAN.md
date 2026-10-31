@@ -685,10 +685,12 @@ D now owns everything that answers "compared to what?": all baselines, the real-
 | Min connection time | 45 min | ASSUMED | |
 | Gate buffer | 10 min | ASSUMED | |
 | Ground overtime cap | 15 min | ASSUMED (policy) | |
-| Cost of delay | ~$100/min (verify) | REAL if sourced | A4A delay-cost figures |
-| Jet fuel price | $/kg (verify) | REAL if sourced | IATA fuel monitor |
-| Missed-connection cost | $/pax | ASSUMED | |
-| Overtime rate, gate change, remote stand, ATC workload, runway-minute value | … | ASSUMED | |
+| Cost of delay | $67.70/min ($100.76 minus $33.06 fuel, costed separately) | REAL | A4A U.S. Passenger Carrier Delay Costs, 2024 |
+| Jet fuel price | $0.54/kg ($1.63/gal at 3.04 kg/gal, density ASSUMED) | REAL | BTS domestic scheduled service, Oct 2015 (matches the flight data year) |
+| Missed-connection cost | $250/pax | ASSUMED | no published per-passenger figure found |
+| Divert fixed cost | $15,000 | ASSUMED | same size as EUROCONTROL standard input (EUR 15,000); real diversions can cost far more |
+| Overtime rate, gate change, remote stand, ATC workload, runway-minute value | $15/min, $300, $1,200, $25/min, $60/min | ASSUMED | `config/costs.yaml` |
+| Turn penalty, turbulence hold penalty, stack congestion, divert coordination | $40/min, $20/min, $5/aircraft, $800 | ASSUMED | `config/costs.yaml` |
 | Status-quo coordination time | … min | ASSUMED | ask a mentor; cite as estimate |
 
 *Tip: show this table to an Airbus mentor early. "Sanity-checked with Airbus mentors" is a strong line for the pitch.*

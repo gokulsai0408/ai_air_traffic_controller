@@ -1,0 +1,4 @@
+# unsafe_accepted = decisions failing a SAFETY or PHYSICAL constraint on re-check.
+agent_kind,worlds,crashed,options_proposed,options_unsafe,unsafe_accepted,kernel_entries_unparsed,label
+adversarial,500,0,1900,1900,0,0,measured
+random,500,0,3397,3397,0,0,measured

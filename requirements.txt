@@ -1,0 +1,10 @@
+pandas>=2.2
+numpy>=1.26
+pydantic>=2.6
+pyyaml>=6.0
+streamlit>=1.35
+plotly>=5.20
+matplotlib>=3.8
+pytest>=8.0
+hypothesis>=6.100
+anthropic>=0.40

@@ -1,0 +1,2 @@
+agent_kind,scenarios,crashed,consensus_rate,compromise_rate,fallback_rate,escalated_rate,max_rounds,logged_max_rounds,agreed_within_limit_rate,unsafe_accepted,guardrail_overrides,median_latency_s,llm_calls_per_scenario,label
+rule,1000,0,0.789,0.0,0.0,0.211,2,2,0.789,0,0,0.0283952999998291,0.0,measured

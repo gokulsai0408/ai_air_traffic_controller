@@ -1,0 +1,9 @@
+# File holds only delayed legs: next legs that recovered are missing, so results are biased toward delay that persisted.
+# min_turn is fitted on months 1-6 and scored on months 7-12. Label: measured.
+target,predictor,fitted_min_turn,n,mae_min,median_ae_min,pearson_r,label
+next_departure_delay,model_fitted_min_turn_39,39,60320,15.504476127320954,9.0,0.8512641784457173,measured
+next_departure_delay,model_assumed_min_turn_35,39,60320,16.345938328912467,9.0,0.8526079414282499,measured
+next_departure_delay,naive_inherit_full_delay,39,60320,17.918882625994694,9.0,0.7922993622019353,measured
+next_late_aircraft_delay,model_fitted_min_turn_29,29,60320,9.878050397877985,7.0,0.9557181088930604,measured
+next_late_aircraft_delay,model_assumed_min_turn_35,29,60320,10.87553050397878,8.0,0.9542336217300663,measured
+next_late_aircraft_delay,naive_inherit_full_delay,29,60320,19.749867374005305,12.0,0.8620499428060412,measured

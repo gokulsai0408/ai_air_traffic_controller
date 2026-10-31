@@ -1,0 +1,7 @@
+# Flight rows are REAL. Gates, slots, fuel, crew, ground shift and connections are SYNTHETIC (seeded generator), so any rate that depends on them is labelled modelled.
+# Costs are modelled with config/costs.yaml constants: delay and fuel prices are sourced, the rest ASSUMED.
+plan,scenarios,with_plan,unsafe_rate,common_scenarios,mean_total_cost_usd,mean_cost_pilot_usd,mean_cost_ground_usd,mean_cost_atc_usd,mean_gate_delay_min,mean_missed_pax,mean_overtime_min,mean_hold_fuel_kg,label_unsafe_rate,label_cost
+Negotiated,1000,939,0.0,219,5647.28412367997,4839.998173515982,642.9089116773613,164.37703848662753,86.81735159817352,18.022831050228312,0.0936225287373898,134.1552511415525,measured,modelled
+Fallback rule,1000,1000,0.061,219,5688.922654442111,4853.696803652969,670.8488123025145,164.37703848662753,86.81735159817352,18.077625570776256,0.0936225287373898,134.1552511415525,modelled (SYNTHETIC context),modelled
+Central optimum (same pool),1000,791,0.0,219,5517.269806748619,4683.605479452055,669.2872888099366,164.37703848662753,86.81735159817352,17.397260273972602,0.0936225287373898,134.1552511415525,measured,modelled
+Do-nothing / FCFS,1000,1000,0.73,219,5688.922654442111,4853.696803652969,670.8488123025145,164.37703848662753,86.81735159817352,18.077625570776256,0.0936225287373898,134.1552511415525,modelled (SYNTHETIC context),modelled
