@@ -60,3 +60,17 @@ def test_complete_raises_llm_error(monkeypatch, stop, content, msg):
     fake_client(monkeypatch, stop, content)
     with pytest.raises(LLMError, match=msg):
         complete("s", "u", {})
+
+
+def test_llm_error_is_a_value_error_for_ds_baseline():
+    # cdm/baseline_single_prompt.py (Person D) retries and fails on (ValidationError, ValueError)
+    from cdm.agents.llm_client import LLMAuthError
+    assert issubclass(LLMError, ValueError) and issubclass(LLMAuthError, ValueError)
+
+
+def test_ds_single_prompt_flow_with_wrapper(monkeypatch):
+    from cdm.schemas import OptionDraft
+    fake_client(monkeypatch, content=[SimpleNamespace(type="text", text='{"action_type":"HOLD","hold_minutes":4,'
+                                                      '"slot_id":"S-3","gate_id":"B1"}')])
+    raw = complete("sys", "{}", OptionDraft.model_json_schema())
+    assert OptionDraft.model_validate_json(raw).hold_minutes == 4

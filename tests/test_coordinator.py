@@ -134,8 +134,11 @@ def test_decline_when_nothing_safe_and_never_relaxes_safety():
     d, ledger = run(FakeWorld(specs))
     assert d.outcome == "ESCALATED" and d.escalation.kind == "DECLINE"
     assert d.option is None and d.escalation.relaxed_constraint_id is None
-    assert d.escalation.blocking_constraints == ["C-FUEL-01"]
-    assert "C-FUEL-01 (margin -4 min)" in d.escalation.required_human_decision
+    assert d.escalation.blocking_constraints == ["C-FUEL-01", "C-GATE-02"]   # nearest plan's blockers first
+    txt = d.escalation.required_human_decision
+    assert "Nearest plan F" in txt and "C-FUEL-01 (short by 4 min)" in txt
+    assert "priority handling or a fuel advisory" in txt and "C-FUEL-01 blocks 3" in txt
+    assert "C-POL-OT-01" not in txt                                              # never offered with SAFETY failing
     assert types(ledger)[-1] == "DECISION"
 
 

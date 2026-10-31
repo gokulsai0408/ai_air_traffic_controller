@@ -14,6 +14,7 @@ from typing import Any, Callable, Optional
 
 from pydantic import BaseModel, ValidationError
 
+from cdm import escalation as esc_text
 from cdm.agents.base import ROLES, Agent, merge_facts
 from cdm.schemas import (ActionType, Assessment, CClass, Decision, Escalation, KernelReport, OpsFacts, Option,
                          OptionDraft, Reason, Vote)
@@ -39,14 +40,16 @@ class Deps:
     do_nothing: Callable[[Any], Option]
     fallback_plan: Callable[[Any], Option]
     apply_facts: Optional[Callable[[Any, OpsFacts], Any]] = None   # tighten-only; None leaves the world as is
+    derive: Optional[Callable[[Option, Any], Any]] = None           # A's derive(); only for times in escalation text
 
     @classmethod
     def default(cls) -> "Deps":
         from cdm.fallback import fallback_plan
         from cdm.kernel import apply_facts, check
         from cdm.options import do_nothing, seed_options
+        from cdm.world import derive
         return cls(check=check, seed_options=seed_options, do_nothing=do_nothing, fallback_plan=fallback_plan,
-                   apply_facts=apply_facts)
+                   apply_facts=apply_facts, derive=derive)
 
 
 class ListLedger:
@@ -107,12 +110,6 @@ def _policy_fails(rep: KernelReport) -> list:
 def min_safety_margin(rep: KernelReport) -> float:
     margins = [r.margin for r in rep.results if r.cls == CClass.SAFETY and r.margin is not None]
     return min(margins) if margins else math.inf
-
-
-def describe(o: Option) -> str:
-    if o.action_type == ActionType.DIVERT:
-        return f"divert to {o.divert_to} after {o.hold_minutes} min hold"
-    return f"{o.action_type.value}: hold {o.hold_minutes} min, slot {o.slot_id}, gate {o.gate_id}"
 
 
 def _dominates(a: tuple, b: tuple) -> bool:
@@ -402,6 +399,14 @@ class _Negotiation:
         self.log("DECISION", "coordinator", d, _ids(rep))
         return d
 
+    def landing_time(self, o: Option) -> Optional[str]:
+        if self.deps.derive is None or o.action_type == ActionType.DIVERT:
+            return None
+        try:
+            return self.deps.derive(o, self.world).landing_time
+        except Exception:   # text only: a missing time must never block an escalation
+            return None
+
     def escalate(self, rnd: int) -> Decision:
         """5.7: smallest single POLICY relaxation if one exists, else DECLINE. SAFETY is never relaxed."""
         relaxable = []
@@ -413,7 +418,8 @@ class _Negotiation:
                 relaxable.append((size, oid, o, pf[0]))
         if relaxable:
             _, oid, o, c = min(relaxable, key=lambda t: (t[0], t[1]))
-            esc = Escalation(kind="POLICY_RELAXATION", required_human_decision=policy_text(c, o),
+            esc = Escalation(kind="POLICY_RELAXATION",
+                             required_human_decision=esc_text.policy_text(c, o, self.landing_time(o)),
                              relaxed_constraint_id=c.id, enabled_option_id=oid, blocking_constraints=[c.id])
             self.log("ESCALATION", "coordinator", esc, [c.id])
             return self.finalise(o, "ESCALATED", rnd, esc)
@@ -421,38 +427,17 @@ class _Negotiation:
         closest = min(self.pool.values(), key=lambda o: (len(_hard_fails(self.reports[o.option_id])),
                                                          -min_safety_margin(self.reports[o.option_id]), o.option_id))
         blocking = _hard_fails(self.reports[closest.option_id])
-        esc = Escalation(kind="DECLINE", required_human_decision=decline_text(blocking),
-                         blocking_constraints=[c.id for c in blocking])
+        counts = esc_text.blocking_counts(self.reports[oid] for oid in self.pool)
+        ordered = list(dict.fromkeys([c.id for c in blocking] + [cid for cid, _ in counts.most_common()]))
+        esc = Escalation(kind="DECLINE",
+                         required_human_decision=esc_text.decline_text(closest, blocking, counts, len(self.pool),
+                                                                         self.landing_time(closest)),
+                         blocking_constraints=ordered)
         self.log("ESCALATION", "coordinator", esc, esc.blocking_constraints)
         d = Decision(outcome="ESCALATED", option=None, kernel=None, rounds_used=rnd, votes=self.all_votes,
                      escalation=esc)
         self.log("DECISION", "coordinator", d, esc.blocking_constraints)
         return d
-
-
-# ---- deterministic escalation templates (never an LLM) -------------------------------------------
-
-def _fmt_margin(c) -> str:
-    return f"{abs(c.margin):g} {c.unit}".strip() if c.margin is not None else "an unknown amount"
-
-
-POLICY_TEMPLATES: dict[str, str] = {
-    "C-POL-OT-01": "approve {amount} of ground-crew overtime beyond the policy cap",
-}
-
-
-def policy_text(c, o: Option) -> str:
-    action = POLICY_TEMPLATES.get(c.id, "relax {cid} by {amount}").format(amount=_fmt_margin(c), cid=c.id)
-    detail = f"; {c.detail}" if c.detail else ""
-    return (f"No plan satisfies all constraints. Minimum change: {action} ({c.id}{detail}). "
-            f"This enables option {o.option_id}: {describe(o)}. Approve / Reject.")
-
-
-def decline_text(blocking: list) -> str:
-    parts = [f"{c.id} (margin {c.margin:+g} {c.unit})".replace(" )", ")") if c.margin is not None else c.id
-             for c in blocking]
-    return ("No safe plan within the model. PIC and controller decision required: priority handling / fuel advisory. "
-            f"Constraints blocking: {', '.join(parts) or 'UNKNOWN'}.")
 
 
 def negotiate(world: Any, agents: list[Agent], cfg: Any, ledger: Any, deps: Optional[Deps] = None) -> Decision:

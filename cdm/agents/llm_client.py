@@ -1,6 +1,12 @@
 """The one shared Claude client wrapper (team convention). Every LLM call in the repo goes through
 `complete()`: the three agents, and D's labelled single-prompt baseline.
 
+Usage:  from cdm.agents.llm import complete      # (or cdm.agents.llm_client)
+        raw = complete(system_prompt, user_text, OptionDraft.model_json_schema())
+        draft = OptionDraft.model_validate_json(raw)     # may raise ValidationError
+Raises LLMError (a ValueError) on timeout, API error, refusal or truncation; never returns partial output.
+Needs ANTHROPIC_API_KEY in the environment or in the repo's gitignored .env.
+
 - Structured output: the response is constrained to the caller's JSON schema (output_config.format);
   callers still validate it with pydantic, which enforces the constraints the API strips.
 - No sampling parameters: the current API rejects temperature/top_p/top_k on every model, so runs are
@@ -29,8 +35,9 @@ _UNSUPPORTED = {"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "m
                 "minLength", "maxLength", "minItems", "maxItems", "uniqueItems", "default"}
 
 
-class LLMError(RuntimeError):
-    """Any failed call: transport error, timeout, refusal, truncation or no text."""
+class LLMError(ValueError):
+    """Any failed call: transport error, timeout, refusal, truncation or no text. A ValueError, so callers
+    that already treat a bad reply as ValueError (e.g. D's single-prompt baseline) count it as a failure."""
 
 
 class LLMAuthError(LLMError):
