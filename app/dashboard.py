@@ -31,8 +31,33 @@ SYN = ":orange-badge[SYNTHETIC]"
 REAL = ":green-badge[REAL]"
 ASSUMED = ":gray-badge[ASSUMED]"
 TAG_BADGE = {"REAL": REAL, "SYNTHETIC": SYN, "ASSUMED_CONST": ASSUMED}
-PLAN_LABELS = {"neg": "Negotiated", "fb": "Fallback rule", "cs": "Central optimum (same pool, full info)",
-               "dn": "Do-nothing / FCFS (status quo)"}
+PLAN_LABELS = {"neg": "Agreed plan", "fb": "Standard rule plan (fallback)",
+               "cs": "Best possible with full information (central optimum, same pool)",
+               "dn": "Status quo, no coordination (do-nothing / FCFS)"}
+# Display names only. The technical name is always kept next to it or in a tooltip.
+CONSTRAINT_NAMES = {
+    "C-SCHEMA-01": "Valid message", "C-REF-01": "Real slot, gate or airport", "C-CONSIST-01": "Hold matches slot",
+    "C-RWY-01": "Runway slot free", "C-WAKE-01": "Wake separation", "C-FUEL-01": "Fuel reserve",
+    "C-FUEL-02": "Fuel to alternate", "C-CREW-01": "Crew duty limit", "C-GATE-01": "Gate big enough",
+    "C-GATE-02": "Gate free", "C-TAXI-01": "Gate reachable", "C-POL-OT-01": "Overtime cap (company policy)",
+}
+REASON_PHRASES = {
+    "ACCEPTABLE": "acceptable", "FUEL_RESERVE": "fuel reserve too low", "CREW_FDP": "crew duty limit",
+    "WAKE_SEPARATION": "wake separation", "RUNWAY_CAPACITY": "runway capacity", "TAXIWAY_CLOSED": "taxiway closed",
+    "GATE_CONFLICT": "gate conflict", "GATE_SIZE": "gate too small", "GROUND_OVERTIME": "ground-crew overtime",
+    "TURNAROUND_SHORT": "turnaround too short", "CONNECTIONS_MISSED": "missed connections",
+    "TURBULENCE": "turbulence in the hold", "HOLDING_WORKLOAD": "holding workload", "KNOCK_ON_DELAY": "knock-on delay",
+    "COST_ABOVE_WALKAWAY": "costs more than its standard plan", "DIVERT_COST": "diversion cost",
+    "PREFERENCE_OTHER": "prefers another plan", "MALFORMED": "invalid reply", "UNKNOWN": "no valid vote",
+}
+ROLE_NAMES = {"pilot": "Pilot / airline", "ground": "Ground ops", "atc": "ATC"}
+# Status badge per outcome: (plain label, colour). Colour is reserved for status.
+STATUS = {"CONSENSUS": ("Agreed", "green"), "COMPROMISE": ("Compromise", "blue"),
+          "FALLBACK": ("Standard plan used", "orange"), "POLICY_RELAXATION": ("Needs your approval", "orange"),
+          "DECLINE": ("No safe plan", "red")}
+HUMAN_STATUS = {"APPROVED": "Approved by you", "OVERRIDDEN": "Overridden by you",
+                "APPROVED_EXCEPTION": "Exception approved by you", "REJECTED_EXCEPTION": "Exception rejected by you",
+                "ACKNOWLEDGED_DECLINE": "Handed over to PIC / controller"}
 EVAL_TABLES = {
     "E1 Kernel ablation": ["e1_ablation", "e1_failures_by_constraint"], "E2 Red team": ["e2_redteam"],
     "E3 Negotiation": ["e3_negotiation"],
@@ -139,14 +164,25 @@ def tamper_copy(path: Path) -> Path:
     return target
 
 
+def constraint_name(cid: str) -> str:
+    return CONSTRAINT_NAMES.get(cid, cid)
+
+
 def badge_row(report: dict) -> None:
-    badges, sources = [], []
-    for result in report.get("results", []):
-        icon = "✅" if result["status"] == "PASS" else "❌"
-        margin = "" if result.get("margin") is None else f" ({result['margin']:.1f}{result.get('unit', '')})"
-        badges.append(f"{icon} `{result['id']}`{margin}")
-        sources.append(f"{result['id']}: {result.get('source') or 'no source'} [{result.get('tag', '')}]")
-    st.markdown(" · ".join(badges) or "No checks recorded", help="\n\n".join(sources) or None)
+    """All checks on one plan: the verdict in plain words; every ID, margin and source in the tooltip."""
+    results = report.get("results", [])
+    if not results:
+        st.caption("No checks recorded")
+        return
+    tips = []
+    for result in results:
+        margin = "" if result.get("margin") is None else f", margin {result['margin']:.1f} {result.get('unit', '')}"
+        tips.append(f"{'PASS' if result['status'] == 'PASS' else 'FAIL'} {result['id']} "
+                    f"({constraint_name(result['id'])}){margin}. Source: {result.get('source') or 'none'} "
+                    f"[{result.get('tag', '')}]")
+    failed = [r for r in results if r["status"] != "PASS"]
+    summary = ("❌ fails " + ", ".join(f"{constraint_name(r['id'])} ({r['id']})" for r in failed)) if failed else         f"✅ passes all {len(results)} safety and policy checks"
+    st.caption(summary, help="\n\n".join(tips))
 
 
 # ---- world context -------------------------------------------------------------------------------
@@ -233,6 +269,47 @@ def signature(key: str, seed: int, agent_kind: str, overrides: dict, ops_note: s
     return json.dumps([key, seed, agent_kind, overrides, ops_note.strip()], sort_keys=True, default=str)
 
 
+def remember(record: dict, overrides: dict, ops_note: str) -> None:
+    """Keep this session's runs (their saved ledgers) for the recent-negotiations list."""
+    history = st.session_state.setdefault("history", [])
+    history.append({"record": record, "overrides": overrides, "ops_note": ops_note})
+
+
+def _open_run(index: int) -> None:
+    item = st.session_state["history"][index]
+    st.session_state.record = item["record"]
+    st.session_state.ledger_path = item["record"]["ledger"]
+    st.session_state.run_overrides = item["overrides"]
+    st.session_state.pinned = st.session_state.get("wanted_signature")
+
+
+def history_panel() -> None:
+    history = st.session_state.get("history", [])
+    if not history:
+        st.info("No negotiations yet in this session.")
+        return
+    st.caption("This session's negotiations, newest first. Each row shows only the outcome; open one for the full view.")
+    from cdm.escalation import describe
+    from cdm.schemas import Option
+    for index in range(len(history) - 1, -1, -1):
+        record = history[index]["record"]
+        path = Path(record["ledger"])
+        if not path.exists():
+            continue
+        entries = read_ledger(path)
+        label, colour, technical = outcome_status(entries)
+        decision, escalation = last_of(entries, "DECISION"), last_of(entries, "ESCALATION")
+        option = (decision or {}).get("payload", {}).get("option")
+        headline = ("Needs a human decision" if escalation else describe(Option.model_validate(option)) if option else "")
+        with st.container(border=True):
+            a, b, c = st.columns([2, 5, 1.5])
+            a.markdown(f":{colour}-badge[{label}]", help=f"Technical outcome: {technical}")
+            a.caption(human_status(entries))
+            b.markdown(f"**{record['flight_key']}** · seed {record['seed']} · {AGENT_LABELS.get(record['agent_kind'], '')}")
+            b.caption(headline)
+            c.button("Open", key=f"open::{index}", on_click=_open_run, args=(index,), width="stretch")
+
+
 def negotiate_now(key: str, seed: int, agent_kind: str, overrides: dict, ops_note: str = "") -> None:
     row = row_for(flights_cached(), key)
     with st.spinner(f"Negotiating: {AGENT_LABELS.get(agent_kind, agent_kind)}"):
@@ -241,10 +318,12 @@ def negotiate_now(key: str, seed: int, agent_kind: str, overrides: dict, ops_not
     st.session_state.ledger_path = record["ledger"]
     st.session_state.run_overrides = overrides
     st.session_state.run_signature = signature(key, seed, agent_kind, overrides, ops_note)
+    st.session_state.pinned = None
+    remember(record, overrides, ops_note)
 
 
 # ---- sidebar ------------------------------------------------------------------------------------
-def _slider(slider: whatif.Slider, section: str, cfg: integration.RunCfg):
+def _slider(slider: whatif.Slider, section: str, cfg: integration.RunCfg, where=None):
     default = whatif.default_value(cfg, section, slider.key)
     values = default if isinstance(default, list) else [default]
     integer = all(isinstance(v, int) and not isinstance(v, bool) for v in values) and float(slider.step).is_integer()
@@ -254,8 +333,8 @@ def _slider(slider: whatif.Slider, section: str, cfg: integration.RunCfg):
     key = f"{section}::{slider.key}"
     if key not in st.session_state:
         st.session_state[key] = value
-    return st.sidebar.slider(slider.label, lo, hi, step=cast(slider.step), key=key,
-                             help=f"{section}.yaml `{slider.key}`, repo value {default}")
+    return (where or st.sidebar).slider(slider.label, lo, hi, step=cast(slider.step), key=key,
+                                        help=f"{section}.yaml `{slider.key}`, repo value {default}")
 
 
 def _reset_sliders() -> None:
@@ -308,55 +387,59 @@ def _find_flight() -> None:
 
 def sidebar() -> tuple[str, int, str, dict, bool, str]:
     """Returns (flight_key, seed, agent kind, what-if overrides, run requested, duty-manager ops note)."""
-    st.sidebar.header("Scenario")
     flights = flights_cached()
-    agent_kind = st.sidebar.selectbox("Agents", list(AGENT_LABELS), format_func=AGENT_LABELS.get,
-                                      help="LLM needs ANTHROPIC_API_KEY; a failed LLM call falls back to RuleAgent. "
-                                           "Random and adversarial agents show the safety kernel holding.")
+    st.sidebar.header("Choose a flight")
+    agent_kind = st.sidebar.selectbox("Who negotiates", list(AGENT_LABELS), format_func=AGENT_LABELS.get,
+                                      help="Agents (agent_kind). LLM needs ANTHROPIC_API_KEY; a failed LLM call falls "
+                                           "back to RuleAgent. Random and adversarial agents show the safety check holding.")
+    st.sidebar.text_input("Find a flight (e.g. DL2586 or a flight key)", key="flight_query", on_change=_find_flight)
+    if st.session_state.get("find_message"):
+        st.sidebar.caption(st.session_state["find_message"])
     hubs = flights["DESTINATION_AIRPORT"].value_counts().head(30).index.tolist()
-    airport = st.sidebar.selectbox("Airport", ["Any"] + hubs, index=1 + hubs.index("ATL"))
-    cause = st.sidebar.selectbox("Cause", list(CAUSES))
-    seed = int(st.sidebar.number_input("World seed", value=0, step=1))
+    left, right = st.sidebar.columns(2)
+    airport = left.selectbox("Airport", ["Any"] + hubs, index=1 + hubs.index("ATL"))
+    cause = right.selectbox("Cause", list(CAUSES))
     run = False
     if "row_key" not in st.session_state:
         st.session_state.row_key = integration.flight_key(demo_row(flights))
-    if st.sidebar.button("🎲 Random row", type="primary"):
+    if st.sidebar.button("🎲 Random flight", type="primary", width="stretch",
+                         help="Random row from the DOT 2015 data, filtered by airport and cause."):
         pool = flights if airport == "Any" else flights[flights["DESTINATION_AIRPORT"] == airport]
         if CAUSES[cause]:
             pool = pool[stratum_mask(pool, CAUSES[cause])]
         st.session_state.row_key = integration.flight_key(pool.sample(n=1).iloc[0])
         run = True
-    run |= st.sidebar.button("▶ Re-run negotiation")
-    st.sidebar.text_input("Find a flight (e.g. DL2586 or a flight key)", key="flight_query", on_change=_find_flight)
-    if st.session_state.get("find_message"):
-        st.sidebar.caption(st.session_state["find_message"])
+    run |= st.sidebar.button("▶ Run again", width="stretch", help="Re-run the negotiation with the current settings.")
 
-    st.sidebar.divider()
-    st.sidebar.markdown(f"**Inject a disruption** {SYN}")
-    st.sidebar.caption("Added to the ops notes the agents read. Free text is untrusted: what the agents extract can "
-                       "only add restrictions, and instructions are ignored.")
-    for label, template in DISRUPTIONS.items():
-        st.sidebar.button(f"+ {label}", on_click=_add_disruption, args=(template,), key=f"disrupt::{label}")
-    st.sidebar.text_area("Ops note from the duty manager", key="ops_note", height=80)
-    st.sidebar.button("Clear note", on_click=lambda: st.session_state.update(ops_note=""))
+    with st.sidebar.expander(f"Add a disruption {SYN}", expanded=bool(st.session_state.get("ops_note"))):
+        st.caption("Added to the ops notes the agents read. Free text is untrusted: what the agents extract can only "
+                   "add restrictions, and instructions are ignored.")
+        for label, template in DISRUPTIONS.items():
+            st.button(f"+ {label}", on_click=_add_disruption, args=(template,), key=f"disrupt::{label}")
+        st.text_area("Describe a disruption", key="ops_note", height=80, help="Ops note from the duty manager "
+                     "(OPS_NOTE_ADDED in the ledger).")
+        st.button("Clear note", on_click=lambda: st.session_state.update(ops_note=""))
 
     cfg = base_cfg()
-    st.sidebar.divider()
-    st.sidebar.markdown(f"**What-if parameters** {SYN}")
-    st.sidebar.caption("These change the generated context and cost constants, then rebuild the world "
-                       "and rerun the negotiation. Anything they change is SYNTHETIC.")
-    for name in whatif.PRESETS:
-        st.sidebar.button(name, on_click=_apply_preset, args=(name,))
-    st.sidebar.button("Reset to repo config", on_click=_reset_sliders)
     synthetic, costs = {}, {}
-    st.sidebar.markdown("**Generated context (synthetic.yaml)**")
-    for slider in whatif.available(whatif.SYNTHETIC_SLIDERS, cfg, "synthetic"):
-        synthetic[slider.key] = _slider(slider, "synthetic", cfg)
-    st.sidebar.markdown("**Cost weights (costs.yaml)**")
-    for slider in whatif.available(whatif.COST_SLIDERS, cfg, "costs"):
-        costs[slider.key] = _slider(slider, "costs", cfg)
-    st.sidebar.caption(f"Round cap: {cfg.max_rounds} (config/protocol.yaml, the brief's \"under 3 turns\"). "
-                       "Not a slider.")
+    with st.sidebar.expander(f"Test assumptions {SYN}", expanded=False):
+        st.caption("What-if parameters. They change the generated context and cost constants, then rebuild the world "
+                   "and rerun the negotiation. Anything they change is SYNTHETIC.")
+        for name in whatif.PRESETS:
+            st.button(name, on_click=_apply_preset, args=(name,))
+        st.button("Reset to repo config", on_click=_reset_sliders)
+        st.markdown("**Generated context** (synthetic.yaml)")
+        for slider in whatif.available(whatif.SYNTHETIC_SLIDERS, cfg, "synthetic"):
+            synthetic[slider.key] = _slider(slider, "synthetic", cfg, st)
+        st.markdown("**Cost weights** (costs.yaml)")
+        for slider in whatif.available(whatif.COST_SLIDERS, cfg, "costs"):
+            costs[slider.key] = _slider(slider, "costs", cfg, st)
+
+    with st.sidebar.expander("Settings", expanded=False):
+        seed = int(st.number_input("Scenario variant (seed)", value=0, step=1,
+                                   help="World seed: picks which generated gates, slots, fuel, crew and connections "
+                                        "this flight gets. Same flight + seed = same world."))
+        st.caption(f"Round cap: {cfg.max_rounds} (config/protocol.yaml, the brief's \"under 3 turns\"). Not a slider.")
     return (st.session_state.row_key, seed, agent_kind, whatif.changed(cfg, synthetic, costs), run,
             st.session_state.get("ops_note", ""))
 
@@ -395,20 +478,88 @@ def _num(value) -> float | None:
     return None if value is None or (isinstance(value, float) and pd.isna(value)) else float(value)
 
 
-def situation_panel(world, record: dict, entries: list[dict]) -> None:
-    """What the duty manager needs first: which flight, how late, what is at stake, and is the status quo safe."""
+def outcome_status(entries: list[dict]) -> tuple[str, str, str]:
+    """(plain label, colour, technical name) for the status badge, from the logged decision."""
+    decision, escalation = last_of(entries, "DECISION"), last_of(entries, "ESCALATION")
+    technical = (escalation or {}).get("payload", {}).get("kind") or (decision or {}).get("payload", {}).get("outcome", "")
+    label, colour = STATUS.get(technical, (technical.title() or "Unknown", "gray"))
+    return label, colour, technical
+
+
+def human_status(entries: list[dict]) -> str:
+    human = last_of(entries, "HUMAN_ACTION")
+    if not human:
+        return "Awaiting your decision"
+    p = human["payload"]
+    target = f" → {p['option_id']}" if p.get("option_id") and p["action"] == "OVERRIDDEN" else ""
+    return HUMAN_STATUS.get(p["action"], p["action"]) + target
+
+
+def summary_sentence(entries: list[dict], record: dict) -> str:
+    """One plain sentence, built only from fields the run already records."""
+    _, _, technical = outcome_status(entries)
+    rounds, cap = record.get("rounds_used", "?"), record.get("max_rounds") or base_cfg().max_rounds
+    opening = {
+        "CONSENSUS": f"All three agents agreed in round {rounds} of {cap}.",
+        "COMPROMISE": f"No unanimous vote, so round {rounds} of {cap} imposed a compromise that leaves no party "
+                      "worse off than its standard plan.",
+        "FALLBACK": f"No acceptable deal after {rounds} of {cap} rounds, so the standard rule plan applies.",
+        "POLICY_RELAXATION": "No plan meets every rule; one needs a single company-policy exception, which only "
+                             "you can approve.",
+        "DECLINE": "No safe plan exists. The system refuses and names who must act; safety limits are never relaxed.",
+    }.get(technical, "")
+    parts = [opening]
+    if record.get("neg_has_plan"):
+        if record.get("dn_has_plan") and not record.get("dn_safe", True):
+            parts.append("The status quo (original gate, first free slot) would have been unsafe.")
+        else:
+            neg, dn = _num(record.get("neg_gate_delay_min")), _num(record.get("dn_gate_delay_min"))
+            if neg is not None and dn is not None:
+                diff = neg - dn
+                parts.append("Same arrival delay as the status quo." if abs(diff) < 0.5 else
+                             f"{abs(diff):.0f} min {'less' if diff < 0 else 'more'} delay than the status quo.")
+        saving = _num(record.get("neg_saving_vs_fallback_usd"))
+        if saving is not None:
+            parts.append("Same total cost as the standard rule plan." if abs(saving) < 0.5 else
+                         f"${abs(saving):,.0f} {'cheaper' if saving > 0 else 'more expensive'} in total than the "
+                         "standard rule plan.")
+    return " ".join(part for part in parts if part)
+
+
+def outcome_card(entries: list[dict], record: dict, world, path: Path) -> None:
+    """Tier 1: status badge, headline in large type, one-sentence summary, then the primary actions."""
+    label, colour, technical = outcome_status(entries)
+    decision, escalation = last_of(entries, "DECISION"), last_of(entries, "ESCALATION")
+    option = (decision or {}).get("payload", {}).get("option")
+    with st.container(border=True):
+        st.markdown(f":{colour}-badge[{label}] &nbsp; **{human_status(entries)}**",
+                    help=f"Technical outcome: {technical}. Decision status comes from the HUMAN_ACTION ledger entry.")
+        if escalation:
+            st.markdown(f"##### {escalation['payload'].get('required_human_decision', '')}")
+        elif option:
+            text = plan_text(option, world)
+            st.markdown(f"### {text[:1].upper()}{text[1:]}")
+        st.markdown(summary_sentence(entries, record))
+        decision_panel(entries, path, world)
+
+
+def context_strip(world, record: dict, entries: list[dict]) -> None:
+    """Tier 2: which flight, how late, what is at stake, and how the status quo compares."""
     p, pilot = world.public, world.pilot
     cause = "weather" if p.weather_delay_min > 15 else "late inbound aircraft"
-    a, b, c, d = st.columns(4)
+    a, b = st.columns(2)
+    c, d = st.columns(2)
     a.metric(f"Flight {REAL}", f"{p.airline} {p.flight_number}", f"{p.origin} → {p.destination}", delta_color="off")
-    b.metric("ETA at runway", fmt_min(p.eta_min), f"{p.arrival_delay_min:.0f} min late ({cause})", delta_color="inverse")
-    c.metric(f"Connecting passengers {SYN}", pilot.connecting_pax, f"{len(pilot.connections)} outbound banks", delta_color="off")
+    b.metric("Arrives at runway", fmt_min(p.eta_min), f"{p.arrival_delay_min:.0f} min late ({cause})",
+             delta_color="inverse", help="ETA at runway (public.eta_min) and recorded arrival delay (REAL).")
+    c.metric(f"Connecting passengers {SYN}", pilot.connecting_pax, f"{len(pilot.connections)} outbound banks",
+             delta_color="off")
     cap = record.get("max_rounds") or base_cfg().max_rounds
     latency = float(record.get("latency_s") or 0.0)
     d.metric("Agents decided in", f"{latency:.1f} s" if latency >= 1 else f"{latency * 1000:.0f} ms",
              f"{record.get('rounds_used', '?')} of {cap} round(s)", delta_color="off",
-             help="Wall-clock time for the three agents, kernel and coordinator (measured). Today: phone calls "
-                  "between tower, airline ops and ramp.")
+             help="Wall-clock time for the three agents, safety check and coordinator (latency_s, measured). "
+                  "Today: phone calls between tower, airline ops and ramp.")
     note = first_of(entries, "OPS_NOTE_ADDED")
     st.markdown(f"**Ops notes** {SYN}: {p.ops_notes}" + (f"  \n:orange[Added by you: “{note['payload']['note']}”]"
                                                         if note else ""))
@@ -416,41 +567,29 @@ def situation_panel(world, record: dict, entries: list[dict]) -> None:
     if baseline:
         dn = baseline["payload"]["do_nothing"]
         failed = [r["id"] for r in dn["kernel"]["results"] if r["status"] == "FAIL"]
-        text = plan_text(dn["option"], world)
+        tip = f"Do-nothing / FCFS plan: {plan_text(dn['option'], world)}"
+        named = ", ".join(f"{constraint_name(c)} ({c})" for c in failed)
         if not dn["kernel"]["safe"]:
-            st.error(f"**Status quo is UNSAFE.** Original gate, first free slot ({text}) fails "
-                     + ", ".join(f"`{c}`" for c in failed) + ". The agents must find something else.")
+            st.markdown(f"**Status quo** would be :red[unsafe]: {named}.", help=tip)
         elif failed:
-            st.warning(f"**Status quo breaks company policy** ({text}): " + ", ".join(f"`{c}`" for c in failed))
+            st.markdown(f"**Status quo** breaks company policy: {named}.", help=tip)
         else:
-            st.info(f"Status quo is legal ({text}). The agents look for something better for all three parties.")
+            st.markdown("**Status quo** is legal; the agents look for something better for all three parties.", help=tip)
+    reports = logged_reports(entries)
+    if reports:
+        unsafe = sum(not r["safe"] for r in reports.values())
+        caught = sum(e["type"] in ("DRAFT_REJECTED", "VOTE_DISCARDED", "GUARDRAIL_OVERRIDE", "AGENT_ERROR",
+                                   "AGENT_FALLBACK") for e in entries)
+        st.caption(f"Safety check (kernel) removed {unsafe} of {len(reports)} candidate plans before any vote."
+                   + (f" Guardrails caught {caught} invalid agent messages (see “What the agents read”)." if caught else ""))
 
 
-def decision_card(entries: list[dict], record: dict, world) -> None:
+def impact_section(entries: list[dict], record: dict) -> None:
+    """Tier 2: the plan against the status quo and the standard plan, and each party against its own standard plan."""
     decision, escalation = last_of(entries, "DECISION"), last_of(entries, "ESCALATION")
-    if not decision:
-        return
-    payload = decision["payload"]
-    outcome, rounds = payload.get("outcome"), payload.get("rounds_used")
-    option = payload.get("option")
-    explain = {"CONSENSUS": "all three agents accepted it", "COMPROMISE": "binding final-round compromise: no agent "
-               "is worse off than under the fallback plan", "FALLBACK": "no deal: the deterministic fallback plan applies"}
-    if escalation:
-        kind = escalation["payload"].get("kind")
-        st.subheader(f"Needs your decision: {'policy exception' if kind == 'POLICY_RELAXATION' else 'no safe plan'}")
-        st.error(escalation["payload"].get("required_human_decision", ""))
-    elif option:
-        st.subheader(f"Agreed plan: {outcome.lower()} in round {rounds}")
-        st.success(f"**{plan_text(option, world)}**  \n{explain.get(outcome, '')}.")
-    kernel = payload.get("kernel") or {}
-    tight = sorted((r for r in kernel.get("results", []) if r["cls"] == "SAFETY" and r.get("margin") is not None),
-                   key=lambda r: r["margin"])[:3]
-    if tight:
-        st.caption("Tightest safety margins on this plan (kernel, measured on SYNTHETIC context): "
-                   + " · ".join(f"`{r['id']}` {r['margin']:.1f} {r['unit']} spare" for r in tight))
-
-    plans = [("neg", "Agreed plan" if not escalation else "Plan if approved"), ("dn", "Status quo (do nothing)"),
-             ("fb", "Fallback rule")]
+    payload = (decision or {}).get("payload", {})
+    plans = [("neg", "Agreed plan" if not escalation else "Plan if approved"), ("dn", "Status quo"),
+             ("fb", "Standard rule plan")]
     rows = []
     for key, label, fmt in IMPACT_METRICS:
         row = {"metric": label}
@@ -461,17 +600,28 @@ def decision_card(entries: list[dict], record: dict, world) -> None:
         row["vs status quo"] = "–" if neg is None or dn is None or not record.get("neg_has_plan") else \
             (fmt.format(neg - dn) if neg - dn < 0 else ("same" if neg == dn else "+" + fmt.format(neg - dn)))
         rows.append(row)
-    st.markdown(f"**Impact** (modelled with config/costs.yaml on SYNTHETIC context {SYN})")
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+    left, right = st.columns([3, 2])
+    left.markdown(f"**Impact** {SYN}", help="Modelled with config/costs.yaml on SYNTHETIC context. Standard rule plan "
+                  "= fallback; status quo = do-nothing / FCFS.")
+    left.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
     if not record.get("dn_safe", True):
-        st.caption("The status-quo column is not a real option here: it fails the safety kernel.")
+        left.caption("The status-quo column is not a real option here: it fails the safety check.")
     if payload.get("costs_by_agent"):
         walkaway = (last_of(entries, "WALKAWAY") or {}).get("payload", {})
-        st.dataframe(pd.DataFrame({role: {"cost of this plan (USD)": f"${cost:,.0f}",
-                                          "walk-away = cost under fallback (USD)": f"${walkaway.get(role, 0):,.0f}",
-                                          "better or equal for this party": "yes" if cost <= walkaway.get(role, 0) + 1e-6
-                                          else "no"}
-                                   for role, cost in payload["costs_by_agent"].items()}).T, width="stretch")
+        right.markdown("**Each party vs its standard plan**",
+                       help="costs_by_agent vs WALKAWAY: each agent's cost under the fallback plan is its walk-away point.")
+        right.dataframe(pd.DataFrame([{
+            "party": ROLE_NAMES.get(role, role), "this plan": f"${cost:,.0f}",
+            "standard plan": f"${walkaway.get(role, 0):,.0f}",
+            "no worse off": "yes" if cost <= walkaway.get(role, 0) + 1e-6 else "no"}
+            for role, cost in payload["costs_by_agent"].items()]), hide_index=True, width="stretch")
+    kernel = payload.get("kernel") or {}
+    tight = sorted((r for r in kernel.get("results", []) if r["cls"] == "SAFETY" and r.get("margin") is not None),
+                   key=lambda r: r["margin"])[:3]
+    if tight:
+        st.caption("Tightest safety margins on this plan (measured on SYNTHETIC context): "
+                   + " · ".join(f"{constraint_name(r['id'])} {r['margin']:.1f} {r['unit']} spare ({r['id']})"
+                                for r in tight))
 
 
 def kernel_panel(entries: list[dict]) -> None:
@@ -486,10 +636,11 @@ def kernel_panel(entries: list[dict]) -> None:
         for result in report["results"]:
             if result["status"] == "FAIL":
                 counts[result["id"]] = counts.get(result["id"], 0) + 1
-    st.markdown(f"**Safety kernel** (pure code, no AI) checked **{len(reports)}** plans: **{compliant}** compliant, "
+    st.markdown(f"**Safety check** (the kernel: pure code, no AI) checked **{len(reports)}** plans: **{compliant}** compliant, "
                 f"**{unsafe}** unsafe, **{policy}** need a policy exception. Unsafe plans never reach a vote.")
     if counts:
-        st.bar_chart(pd.Series(counts, name="plans failing").sort_values(ascending=False), horizontal=True, height=220)
+        named = {f"{constraint_name(cid)} ({cid})": n for cid, n in counts.items()}
+        st.bar_chart(pd.Series(named, name="plans failing").sort_values(ascending=False), horizontal=True, height=240)
 
 
 def agents_panel(entries: list[dict]) -> None:
@@ -527,7 +678,8 @@ def problem_panel(entries: list[dict], record: dict) -> None:
     baseline = first_of(entries, "BASELINE")
     if not baseline:
         return
-    for name, prefix, title in (("do_nothing", "dn", "Do-nothing plan (status quo)"), ("fallback", "fb", "Fallback plan")):
+    for name, prefix, title in (("do_nothing", "dn", "Status quo (do-nothing plan)"),
+                                ("fallback", "fb", "Standard rule plan (fallback)")):
         part = baseline["payload"].get(name) or {}
         report, option = part.get("kernel"), part.get("option") or {}
         if isinstance(report, dict):
@@ -551,7 +703,7 @@ def timeline_panel(entries: list[dict], world=None) -> None:
         columns = st.columns(len(proposals))
         for column, entry in zip(columns, proposals):
             drafts = entry["payload"].get("drafts", [])
-            column.markdown(f"**{entry['actor']}** proposed {len(drafts)}")
+            column.markdown(f"**{ROLE_NAMES.get(entry['actor'], entry['actor'])}** proposed {len(drafts)}")
             for draft in drafts:
                 column.caption(describe(draft) if isinstance(draft, dict) else str(draft))
                 if draft.get("rationale"):
@@ -574,7 +726,9 @@ def timeline_panel(entries: list[dict], world=None) -> None:
                     mark = "✅" if vote["vote"] == "ACCEPT" else "❌"
                     own = assessments.get(round_number, {}).get(vote["agent"], {}).get(option_id, {})
                     cost = f" · ${own['cost_usd']:,.0f}" if "cost_usd" in own else ""
-                    column.markdown(f"{mark} **{vote['agent']}** `{vote['reason']}`{cost}")
+                    column.markdown(f"{mark} **{ROLE_NAMES.get(vote['agent'], vote['agent'])}**: "
+                                    f"{REASON_PHRASES.get(vote['reason'], vote['reason'])}{cost}",
+                                    help=f"Reason code {vote['reason']}; cost is this agent's own assessment (USD).")
                     if vote.get("rationale"):
                         column.caption(vote["rationale"])
     compromise = [e for e in entries if e["type"] == "COMPROMISE_CHECK"]
@@ -584,7 +738,8 @@ def timeline_panel(entries: list[dict], world=None) -> None:
             objections = entry["payload"].get("verified_objections") or []
             oid = entry['payload'].get('option_id')
             st.caption(f"{oid} ({describe(options[oid]) if oid in options else 'plan'}): "
-                       + (f"blocked by verified objection from {', '.join(objections)}" if objections else "no objection"))
+                       + (f"blocked by verified objection from {', '.join(ROLE_NAMES.get(o, o) for o in objections)}"
+                          if objections else "no objection"))
 
 
 def compliant_alternatives(entries: list[dict], world, exclude: str | None) -> list[tuple[str, dict, float]]:
@@ -606,62 +761,70 @@ def compliant_alternatives(entries: list[dict], world, exclude: str | None) -> l
 
 
 def decision_panel(entries: list[dict], path: Path, world=None) -> None:
-    """The human decides last: approve, override with another kernel-checked plan, or rule on an escalation."""
+    """The human decides last: approve, override with another kernel-checked plan, or rule on an escalation.
+    The action buttons come first; the optional note sits under them and is read from session state on click."""
     decision, escalation = last_of(entries, "DECISION"), last_of(entries, "ESCALATION")
     human = last_of(entries, "HUMAN_ACTION")
-    st.markdown("**Duty manager decision** (you act only after the agents have finished; logged in the hash chain)")
     if human:
         p = human["payload"]
         extra = f" → {p['option_id']}" if p.get("option_id") else ""
         st.success(f"On record: **{p['action']}**{extra}" + (f" · note: {p['note']}" if p.get("note") else ""))
         return
-    note = st.text_input("Reason / note for the log (optional)")
+    note = st.session_state.get("decision_note", "")
+
+    def act(action: str, **details) -> None:
+        append_human_action(path, action, note, **details)
+        st.session_state["decision_note"] = ""
+        st.rerun()
+
+    def note_box() -> None:
+        st.text_input("Reason / note for the log (optional)", key="decision_note")
+        st.caption("You act after the agents have finished; every action is logged in the audit log.")
+
     payload = (decision or {}).get("payload", {})
     chosen = (payload.get("option") or {}).get("option_id")
     if escalation and escalation["payload"].get("kind") == "POLICY_RELAXATION":
         esc = escalation["payload"]
+        cid = esc.get("relaxed_constraint_id")
         left, right = st.columns(2)
-        if left.button(f"Approve exception ({esc.get('relaxed_constraint_id')})", type="primary"):
-            append_human_action(path, "APPROVED_EXCEPTION", note, option_id=esc.get("enabled_option_id"),
-                                relaxed_constraint_id=esc.get("relaxed_constraint_id"),
-                                constraint_ids=[esc.get("relaxed_constraint_id")])
-            st.rerun()
+        if left.button(f"Approve exception: {constraint_name(cid)} ({cid})", type="primary"):
+            act("APPROVED_EXCEPTION", option_id=esc.get("enabled_option_id"), relaxed_constraint_id=cid,
+                constraint_ids=[cid])
         if right.button("Reject exception"):
-            append_human_action(path, "REJECTED_EXCEPTION", note, constraint_ids=[esc.get("relaxed_constraint_id")])
-            st.rerun()
-        st.caption("Only POLICY constraints can ever be offered here. SAFETY and PHYSICAL limits are never relaxed.")
+            act("REJECTED_EXCEPTION", constraint_ids=[cid])
+        st.caption("Only company-policy limits can ever be offered here. Safety and physical limits are never relaxed.")
+        note_box()
         return
     if escalation:
         if st.button("Acknowledge and hand over to PIC / controller", type="primary"):
-            append_human_action(path, "ACKNOWLEDGED_DECLINE", note,
-                                constraint_ids=escalation["payload"].get("blocking_constraints", []))
-            st.rerun()
+            act("ACKNOWLEDGED_DECLINE", constraint_ids=escalation["payload"].get("blocking_constraints", []))
+        note_box()
         return
     approve, override = st.columns(2)
     if approve.button("Approve", type="primary"):
-        append_human_action(path, "APPROVED", note, option_id=chosen)
-        st.rerun()
+        act("APPROVED", option_id=chosen)
     if world is None:
         if override.button("Override"):
-            append_human_action(path, "OVERRIDDEN", note)
-            st.rerun()
+            act("OVERRIDDEN")
+        note_box()
         return
     alternatives = compliant_alternatives(entries, world, chosen)
     if not alternatives:
         override.caption("No other safe, compliant plan exists to override with.")
-        return
-    labels = [f"{oid}: {plan_text(raw, world)} · total ${cost:,.0f}" for oid, raw, cost in alternatives]
-    pick = override.selectbox("Or override with another safe plan", labels, index=None,
-                              placeholder="Choose a kernel-checked alternative")
-    if pick and override.button("Override with this plan"):
-        oid, raw, _ = alternatives[labels.index(pick)]
-        append_human_action(path, "OVERRIDDEN", note, option_id=oid, option=raw)
-        st.rerun()
+    else:
+        labels = [f"{oid}: {plan_text(raw, world)} · total ${cost:,.0f}" for oid, raw, cost in alternatives]
+        pick = override.selectbox("Or override with another safe plan", labels, index=None,
+                                  placeholder="Choose a kernel-checked alternative")
+        if pick and override.button("Override with this plan"):
+            oid, raw, _ = alternatives[labels.index(pick)]
+            act("OVERRIDDEN", option_id=oid, option=raw)
+    note_box()
 
 
 def baselines_panel(record: dict, overrides: dict | None) -> None:
     badge = f" {SYN}" if not whatif.is_empty(overrides) else ""
-    st.markdown(f"**E4 for this run: every plan scored with the same cost functions and kernel**{badge}")
+    st.markdown(f"**Every plan scored with the same cost functions and safety check**{badge}",
+                help="E4 baselines for this run: negotiated (neg), fallback (fb), central optimum (cs), do-nothing (dn).")
     rows = []
     for prefix, label in PLAN_LABELS.items():
         if not record.get(f"{prefix}_has_plan"):
@@ -680,13 +843,15 @@ def baselines_panel(record: dict, overrides: dict | None) -> None:
         return "n/a" if value is None or pd.isna(value) else f"${value:,.0f}"
 
     a, b, c, d = st.columns(4)
-    a.metric("Saving vs fallback", money("neg_saving_vs_fallback_usd"), help="modelled; n/a unless decided and "
-             "the fallback is also legal")
-    b.metric("Price of privacy", money("price_of_privacy_usd"), help="negotiated minus central optimum; modelled")
+    a.metric("Saving vs standard plan", money("neg_saving_vs_fallback_usd"), help="Saving vs fallback "
+             "(neg_saving_vs_fallback_usd). Modelled; n/a unless decided and the fallback is also legal.")
+    b.metric("Cost of keeping data private", money("price_of_privacy_usd"), help="Price of privacy "
+             "(price_of_privacy_usd): negotiated minus central optimum. Modelled.")
     conflict = record.get("conflict")
-    c.metric("Conflict of interest", "n/a" if conflict is None or pd.isna(conflict) else ("yes" if conflict else "no"),
-             help="no single compliant option is cheapest for all three agents; modelled")
-    d.metric("Compliant options in pool", int(record.get("compliant_options") or 0), help="measured")
+    c.metric("Parties disagreed", "n/a" if conflict is None or pd.isna(conflict) else ("yes" if conflict else "no"),
+             help="Conflict of interest (conflict): no single compliant option is cheapest for all three agents. Modelled.")
+    d.metric("Safe plans available", int(record.get("compliant_options") or 0),
+             help="Compliant options in pool (compliant_options): safe and policy-compliant. Measured.")
     st.caption("Costs: modelled with config/costs.yaml (delay and fuel sourced, the rest ASSUMED). "
                "Safety verdicts: measured by the kernel on SYNTHETIC context. The central optimum sees every "
                "agent's private data, so it is a bound, not a deployable design.")
@@ -708,7 +873,7 @@ def audit_panel(entries: list[dict], path: Path) -> None:
         (st.success if report.ok else st.error)(report.message)
     st.download_button("Download this ledger (JSONL)", path.read_bytes(), file_name=path.name,
                        mime="application/jsonl")
-    st.caption(f"Log file: `{path}` · replay it anywhere with `python -m cdm.verify {path.name}`")
+    st.caption(f"Log file (ledger): `{path}` · replay it anywhere with `python -m cdm.verify {path.name}`")
 
 
 def quick_batch_panel(overrides: dict | None) -> None:
@@ -755,23 +920,26 @@ def evaluation_panel(results_dir: Path = RESULTS_DIR) -> None:
 
 def main() -> None:
     st.set_page_config(page_title="Disruption Negotiation", layout="wide")
-    st.title("Disruption negotiation: ATC × Pilot × Ground")
+    st.markdown("### Disruption negotiation: ATC × Pilot × Ground")
     st.caption("For the airline OCC duty manager at a hub during a disruption. Three AI agents negotiate a fix "
                "on their own; code checks every plan for safety; you make the final call.")
     key, seed, agent_kind, overrides, run, ops_note = sidebar()
     wanted = signature(key, seed, agent_kind, overrides, ops_note)
+    st.session_state.wanted_signature = wanted
+    pinned = st.session_state.get("pinned")
+    if pinned is not None and pinned != wanted:      # the user changed a setting: leave the earlier run
+        st.session_state.pinned = pinned = None
     stale = st.session_state.get("run_signature") != wanted
     # Non-LLM agents are instant, so any change reruns at once. LLM agents cost API calls, so they wait for the button.
-    if run or "record" not in st.session_state or (stale and agent_kind in INSTANT_KINDS):
+    if run or "record" not in st.session_state or (stale and agent_kind in INSTANT_KINDS and pinned is None):
         negotiate_now(key, seed, agent_kind, overrides, ops_note)
-    elif stale:
-        st.info("Settings changed. Press ▶ Re-run negotiation to run the LLM agents again.")
+    elif stale and pinned is None:
+        st.info("Settings changed. Press ▶ Run again to run the LLM agents again.")
 
     record = st.session_state.record
     path = Path(st.session_state.ledger_path)
     run_overrides = st.session_state.get("run_overrides")
     entries = read_ledger(path)
-    what_if_banner(run_overrides)
 
     from cdm.world import build_world
     world = build_world(row_for(flights_cached(), record["flight_key"]), record["seed"],
@@ -780,29 +948,34 @@ def main() -> None:
     st.session_state["disruption_hints"] = {"gate": world.ground.original_gate,
                                             "taxiway": (original.taxiway if original and original.taxiway else "B")}
 
-    live, agents, baselines, audit, evaluation = st.tabs(
-        ["Decision", "How the agents got there", "Baselines (this run)", "Audit", "Evaluation"])
-    with live:
-        situation_panel(world, record, entries)
-        st.divider()
-        decision_card(entries, record, world)
-        decision_panel(entries, path, world)
-        with st.expander(f"Full scenario data {REAL} {SYN}", expanded=False):
+    current, recent, evaluation = st.tabs(["This negotiation", "Recent negotiations", "Evaluation"])
+    with current:
+        if st.session_state.get("pinned") is not None:
+            st.info(f"Viewing an earlier negotiation ({record['flight_key']}, seed {record['seed']}). "
+                    "Change any setting or press ▶ Run again to return to live runs.")
+        what_if_banner(run_overrides)
+        outcome_card(entries, record, world, path)                       # Tier 1 + primary actions
+        context_strip(world, record, entries)                            # Tier 2
+        impact_section(entries, record)
+        st.markdown("##### Details")                                      # Tier 3
+        with st.expander("Negotiation, round by round"):
+            timeline_panel(entries, world)
+        with st.expander("Safety check"):
+            kernel_panel(entries)
+            st.divider()
+            problem_panel(entries, record)
+        with st.expander("What the agents read"):
+            agents_panel(entries)
+        with st.expander("Compare with other plans"):
+            baselines_panel(record, run_overrides)
+        with st.expander(f"Scenario data {REAL} {SYN}"):
             context_panel(world, run_overrides)
-    with agents:
-        with st.expander("How a decision is made", expanded=False):
+        with st.expander("Audit log"):
+            audit_panel(entries, path)
+        with st.expander("How it works"):
             st.markdown(SEQUENCE.format(max_rounds=base_cfg().max_rounds))
-        kernel_panel(entries)
-        st.divider()
-        problem_panel(entries, record)
-        st.divider()
-        timeline_panel(entries, world)
-        st.divider()
-        agents_panel(entries)
-    with baselines:
-        baselines_panel(record, run_overrides)
-    with audit:
-        audit_panel(entries, path)
+    with recent:
+        history_panel()
     with evaluation:
         quick_batch_panel(overrides)
         st.divider()

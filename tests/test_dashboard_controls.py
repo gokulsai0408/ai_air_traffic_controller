@@ -96,3 +96,39 @@ def test_plan_text_reads_like_a_plan(cfg, rows):
     text = dashboard.plan_text(do_nothing(world).model_dump(mode="json"), world)
     assert "slot" in text and "on blocks" in text
     assert "malformed" in dashboard.plan_text({"action_type": "HOLD", "hold_minutes": -5}, world)
+
+
+def test_outcome_summary_reads_plainly_and_uses_only_logged_fields(saved_run):
+    entries = dashboard.read_ledger(Path(saved_run["ledger"]))
+    label, colour, technical = dashboard.outcome_status(entries)
+    assert technical in ("CONSENSUS", "COMPROMISE", "FALLBACK", "POLICY_RELAXATION", "DECLINE")
+    assert (label, colour) == dashboard.STATUS[technical]
+    sentence = dashboard.summary_sentence(entries, saved_run)
+    assert sentence and "round" in sentence or technical in ("POLICY_RELAXATION", "DECLINE")
+    assert dashboard.human_status(entries) == "Awaiting your decision"
+
+
+def test_recent_negotiations_lists_runs_and_opens_an_earlier_one():
+    app = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+    first = app.session_state["ledger_path"]
+    try:
+        next(b for b in app.sidebar.button if "Random" in b.label).click().run()
+        second = app.session_state["ledger_path"]
+        opens = [b for b in app.button if b.label == "Open"]
+        assert len(opens) == 2                                   # newest first: [second, first]
+        opens[1].click().run()
+        assert not app.exception and app.session_state["ledger_path"] == first
+        assert any("Viewing an earlier negotiation" in i.value for i in app.info)
+    finally:
+        _cleanup(app, first, second)
+
+
+def test_primary_action_is_inside_the_outcome_card():
+    app = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+    try:
+        tab = app.tabs[0]
+        labels = [b.label for b in tab.button]
+        primary = {"Approve", "Acknowledge and hand over to PIC / controller"}
+        assert labels and (labels[0] in primary or labels[0].startswith("Approve exception"))
+    finally:
+        _cleanup(app)
