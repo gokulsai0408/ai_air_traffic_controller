@@ -132,3 +132,18 @@ def test_primary_action_is_inside_the_outcome_card():
         assert labels and (labels[0] in primary or labels[0].startswith("Approve exception"))
     finally:
         _cleanup(app)
+
+
+def test_changing_airport_loads_and_negotiates_a_flight_for_that_airport():
+    app = AppTest.from_file(APP, default_timeout=TIMEOUT).run()
+    first = app.session_state["ledger_path"]
+    try:
+        airport = next(s for s in app.sidebar.selectbox if s.label == "Airport")
+        target = next(o for o in airport.options if o not in ("Any", "ATL"))
+        airport.select(target).run()
+        assert not app.exception
+        assert app.session_state["ledger_path"] != first
+        assert app.session_state["record"]["airport"] == target
+        assert any(target in c.value for c in app.sidebar.caption if "Loaded flight" in c.value)
+    finally:
+        _cleanup(app, first)

@@ -385,6 +385,22 @@ def _find_flight() -> None:
         st.session_state["find_message"] = f"Loaded {st.session_state.row_key} ({len(hit)} match(es))"
 
 
+def matching_flights(airport: str, cause: str) -> pd.DataFrame:
+    flights = flights_cached()
+    pool = flights if airport == "Any" else flights[flights["DESTINATION_AIRPORT"] == airport]
+    return pool[stratum_mask(pool, CAUSES[cause])] if CAUSES[cause] else pool
+
+
+def _load_matching_flight() -> None:
+    """Airport or Cause changed: load a random flight that matches, so the next run is about that airport."""
+    pool = matching_flights(st.session_state.get("airport_filter", "Any"), st.session_state.get("cause_filter", "Any"))
+    if pool.empty:
+        st.session_state["find_message"] = "No flight matches that airport and cause."
+        return
+    st.session_state.row_key = integration.flight_key(pool.sample(n=1).iloc[0])
+    st.session_state["find_message"] = ""   # a new flight key: non-LLM agents rerun at once, LLM agents on ▶ Run again
+
+
 def sidebar() -> tuple[str, int, str, dict, bool, str]:
     """Returns (flight_key, seed, agent kind, what-if overrides, run requested, duty-manager ops note)."""
     flights = flights_cached()
@@ -397,19 +413,20 @@ def sidebar() -> tuple[str, int, str, dict, bool, str]:
         st.sidebar.caption(st.session_state["find_message"])
     hubs = flights["DESTINATION_AIRPORT"].value_counts().head(30).index.tolist()
     left, right = st.sidebar.columns(2)
-    airport = left.selectbox("Airport", ["Any"] + hubs, index=1 + hubs.index("ATL"))
-    cause = right.selectbox("Cause", list(CAUSES))
+    airport = left.selectbox("Airport", ["Any"] + hubs, index=1 + hubs.index("ATL"), key="airport_filter",
+                             on_change=_load_matching_flight, help="Changing this loads a matching flight.")
+    cause = right.selectbox("Cause", list(CAUSES), key="cause_filter", on_change=_load_matching_flight,
+                            help="Changing this loads a matching flight.")
     run = False
     if "row_key" not in st.session_state:
         st.session_state.row_key = integration.flight_key(demo_row(flights))
     if st.sidebar.button("🎲 Random flight", type="primary", width="stretch",
                          help="Random row from the DOT 2015 data, filtered by airport and cause."):
-        pool = flights if airport == "Any" else flights[flights["DESTINATION_AIRPORT"] == airport]
-        if CAUSES[cause]:
-            pool = pool[stratum_mask(pool, CAUSES[cause])]
-        st.session_state.row_key = integration.flight_key(pool.sample(n=1).iloc[0])
+        st.session_state.row_key = integration.flight_key(matching_flights(airport, cause).sample(n=1).iloc[0])
         run = True
-    run |= st.sidebar.button("▶ Run again", width="stretch", help="Re-run the negotiation with the current settings.")
+    run |= st.sidebar.button("▶ Run again", width="stretch", help="Re-run the negotiation for the loaded flight with "
+                             "the current settings.")
+    st.sidebar.caption(f"Loaded flight: **{st.session_state.row_key}**")
 
     with st.sidebar.expander(f"Add a disruption {SYN}", expanded=bool(st.session_state.get("ops_note"))):
         st.caption("Added to the ops notes the agents read. Free text is untrusted: what the agents extract can only "
