@@ -5,9 +5,9 @@ import time
 
 import pytest
 
-from cdm.costs import cost_atc, cost_ground, cost_pilot, hold_fuel_kg
+from cdm.costs import _gate_utilisation, cost_atc, cost_ground, cost_pilot, hold_fuel_kg
 from cdm.schemas import ActionType, OpsFacts, Option
-from cdm.world import REMOTE_GATE, World, apply_ops_facts, build_world, derive
+from cdm.world import REMOTE_GATE, ConnectionBank, Gate, World, apply_ops_facts, build_world, derive, transfer_min
 from helpers import find_feasible, option_for, sample_cfg, sample_flights
 
 CFG = sample_cfg()
@@ -188,7 +188,9 @@ def test_remote_stand_costs_ground_more_than_original_gate():
     slot = world.menus.slots[0]
     remote, original = option_for(world, slot, REMOTE_GATE), option_for(world, slot, world.ground.original_gate)
     gap = cost_ground(remote, derive(remote, world), world) - cost_ground(original, derive(original, world), world)
-    assert gap == pytest.approx(CFG.cost("gate_change_fixed") + CFG.cost("remote_stand_cost"))
+    gate = next(g for g in world.ground.gates if g.gate_id == world.ground.original_gate)
+    use = _gate_utilisation(gate, option_on_block(world, original) + world.ground.min_turn_min, world)
+    assert gap == pytest.approx(CFG.cost("gate_change_fixed") + CFG.cost("remote_stand_cost") - use)
 
 
 def test_short_turn_capped_so_divert_never_beats_landing_on_a_blown_next_leg():
@@ -197,7 +199,10 @@ def test_short_turn_capped_so_divert_never_beats_landing_on_a_blown_next_leg():
     gate = world.ground.original_gate
     land = option_for(world, world.menus.slots[0], gate)
     divert = option_for(world, divert_to=world.menus.alternates[0])
-    land_cost = cost_ground(land, derive(land, world), world) - derive(land, world).ground_overtime_min * CFG.cost("overtime_rate_per_min")
+    use = _gate_utilisation(next(g for g in world.ground.gates if g.gate_id == gate),
+                            option_on_block(world, land) + world.ground.min_turn_min, world)
+    land_cost = (cost_ground(land, derive(land, world), world) - use
+                 - derive(land, world).ground_overtime_min * CFG.cost("overtime_rate_per_min"))
     assert land_cost == pytest.approx(world.ground.min_turn_min * CFG.cost("turn_penalty_per_min"))
     assert cost_ground(divert, derive(divert, world), world) == pytest.approx(land_cost)
 
@@ -220,6 +225,64 @@ def test_hold_fuel_uses_real_wait():
     option = option_for(world, world.menus.slots[-1], REMOTE_GATE)
     expected = (next(s.time_min for s in world.safety_view.slots if s.slot_id == option.slot_id) - world.public.eta_min) * world.pilot.hold_flow_kg_per_min
     assert hold_fuel_kg(option, derive(option, world), world) == pytest.approx(expected, abs=world.pilot.hold_flow_kg_per_min)
+
+
+def option_on_block(world, option):
+    return next(s.time_min for s in world.safety_view.slots if s.slot_id == option.slot_id) + world.public.taxi_in_min
+
+
+def test_gates_spread_over_neighbouring_concourses():
+    for world in worlds(40):
+        contact = [g for g in world.ground.gates if g.gate_id != REMOTE_GATE]
+        concourses = sorted({g.concourse for g in contact})
+        assert 2 <= len(concourses) <= 3 and "".join(concourses) in "ABCD"
+        assert all(g.gate_id.startswith(g.concourse) for g in contact)
+        assert world.ground.original_gate in {g.gate_id for g in contact}
+        assert {b.concourse for b in world.pilot.connections} <= set(concourses)
+
+
+def test_layout_leaves_other_values_unchanged():
+    # The layout has its own random stream, so adding it did not move fuel, slots or ops notes
+    world = build_world(ATL, 0, CFG)
+    assert world.public.ops_notes.startswith("TWY B closed until 2050L.")
+    assert len(world.safety_view.slots) == 36
+
+
+def test_transfer_time_grows_with_concourse_distance():
+    world = calm_world()
+    times = world.pilot.transfer_min
+    gate_a, gate_c, remote = Gate(gate_id="A1", size_class="widebody", concourse="A"),         Gate(gate_id="C1", size_class="widebody", concourse="C"), Gate(gate_id=REMOTE_GATE, size_class="widebody")
+    bank = ConnectionBank(dep_min=0, pax=10, concourse="A")
+    assert transfer_min(gate_a, bank, world) == times.same < transfer_min(gate_c, bank, world) == times.far
+    assert transfer_min(remote, bank, world) == times.remote_bus + times.same
+    assert transfer_min(None, bank, world) >= transfer_min(remote, bank, world)
+
+
+def test_gate_far_from_connection_misses_it():
+    world = calm_world()
+    option = option_for(world, world.menus.slots[0], REMOTE_GATE)
+    on_block = option_on_block(world, option)
+    times = world.pilot.transfer_min
+    mct = CFG.cost("min_connection_time_min")
+    near = next(g for g in world.ground.gates if g.concourse)
+    world.pilot.connections = [ConnectionBank(dep_min=on_block + mct + times.same + 1, pax=30, concourse=near.concourse)]
+    assert derive(option_for(world, option.slot_id, near.gate_id), world).missed_pax == 0
+    assert derive(option, world).missed_pax == 30
+
+
+def test_oversize_gate_and_tight_next_arrival_cost_ground():
+    world = calm_world()
+    aircraft = world.public.aircraft_category
+    bigger = {"regional": "narrowbody", "narrowbody": "widebody", "widebody": "widebody"}[aircraft]
+    snug = Gate(gate_id="X1", size_class=aircraft, concourse="A")
+    oversize = Gate(gate_id="X2", size_class=bigger, concourse="A")
+    steps = int(bigger != aircraft)
+    assert _gate_utilisation(oversize, 0, world) - _gate_utilisation(snug, 0, world) == steps * CFG.cost("gate_size_mismatch_per_class")
+    buffer = world.params.gate_buffer_min
+    tight = Gate(gate_id="X3", size_class=aircraft, concourse="A", occupancy=[(buffer + 10, buffer + 60)])
+    roomy = Gate(gate_id="X4", size_class=aircraft, concourse="A", occupancy=[(buffer + 90, buffer + 120)])
+    assert _gate_utilisation(tight, 0, world) == pytest.approx(20 * CFG.cost("tight_fit_per_min"))
+    assert _gate_utilisation(roomy, 0, world) == 0
 
 
 def test_costs_never_negative():

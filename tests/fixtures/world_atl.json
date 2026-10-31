@@ -1,7 +1,7 @@
 {
   "flight_key": "20150612-DL1234-ORD-ATL-1630",
   "seed": 0,
-  "config_hash": "8afbcbee497557a1",
+  "config_hash": "39b7fb3560c21ba7",
   "base_date": "2015-06-12",
   "params": {
     "gate_buffer_min": 10.0,
@@ -29,6 +29,9 @@
       "holding_workload_per_min": 25.0,
       "stack_congestion_per_aircraft": 5.0,
       "runway_minute_value": 60.0,
+      "gate_size_mismatch_per_class": 400.0,
+      "tight_fit_comfort_min": 30.0,
+      "tight_fit_per_min": 20.0,
       "divert_coordination_cost": 800.0,
       "min_connection_time_min": 45.0
     }
@@ -60,24 +63,34 @@
     "connections": [
       {
         "dep_min": 1291.9495296980201,
-        "pax": 14
+        "pax": 14,
+        "concourse": "B"
       },
       {
         "dep_min": 1303.8050726458546,
-        "pax": 15
+        "pax": 15,
+        "concourse": "B"
       },
       {
         "dep_min": 1312.6589156740101,
-        "pax": 13
+        "pax": 13,
+        "concourse": "B"
       },
       {
         "dep_min": 1364.9924111162004,
-        "pax": 11
+        "pax": 11,
+        "concourse": "B"
       }
     ],
     "connecting_pax": 53,
     "hold_flow_kg_per_min": 40.0,
-    "turbulence_in_hold": false
+    "turbulence_in_hold": false,
+    "transfer_min": {
+      "same": 3.028050656055193,
+      "adjacent": 8.570275917461656,
+      "far": 15.858687132142558,
+      "remote_bus": 15.158065120939568
+    }
   },
   "ground": {
     "gates": [
@@ -98,7 +111,8 @@
             1423.1082027213174,
             1473.7274984854575
           ]
-        ]
+        ],
+        "concourse": "B"
       },
       {
         "gate_id": "B2",
@@ -117,10 +131,11 @@
             1408.8154512870576,
             1471.4693457962612
           ]
-        ]
+        ],
+        "concourse": "B"
       },
       {
-        "gate_id": "B3",
+        "gate_id": "C1",
         "size_class": "regional",
         "taxiway": "C",
         "occupancy": [
@@ -140,10 +155,11 @@
             1304.8704270427365,
             1351.2792509064043
           ]
-        ]
+        ],
+        "concourse": "C"
       },
       {
-        "gate_id": "B4",
+        "gate_id": "B3",
         "size_class": "narrowbody",
         "taxiway": "C",
         "occupancy": [
@@ -163,10 +179,11 @@
             1438.420322210935,
             1503.1171123241684
           ]
-        ]
+        ],
+        "concourse": "B"
       },
       {
-        "gate_id": "B5",
+        "gate_id": "C2",
         "size_class": "narrowbody",
         "taxiway": "C",
         "occupancy": [
@@ -178,10 +195,11 @@
             1408.2905765706898,
             1443.8263541849253
           ]
-        ]
+        ],
+        "concourse": "C"
       },
       {
-        "gate_id": "B6",
+        "gate_id": "C3",
         "size_class": "narrowbody",
         "taxiway": "C",
         "occupancy": [
@@ -193,10 +211,11 @@
             1457.4938355384054,
             1495.0548184682145
           ]
-        ]
+        ],
+        "concourse": "C"
       },
       {
-        "gate_id": "B7",
+        "gate_id": "C4",
         "size_class": "regional",
         "taxiway": "B",
         "occupancy": [
@@ -212,10 +231,11 @@
             1452.0338287424058,
             1500.1471786618556
           ]
-        ]
+        ],
+        "concourse": "C"
       },
       {
-        "gate_id": "B8",
+        "gate_id": "B4",
         "size_class": "narrowbody",
         "taxiway": "D",
         "occupancy": [
@@ -231,10 +251,11 @@
             1402.062305234118,
             1454.44439139244
           ]
-        ]
+        ],
+        "concourse": "B"
       },
       {
-        "gate_id": "B9",
+        "gate_id": "C5",
         "size_class": "narrowbody",
         "taxiway": "B",
         "occupancy": [
@@ -250,10 +271,11 @@
             1433.93330106241,
             1478.3998719077827
           ]
-        ]
+        ],
+        "concourse": "C"
       },
       {
-        "gate_id": "B10",
+        "gate_id": "B5",
         "size_class": "widebody",
         "taxiway": "A",
         "occupancy": [
@@ -273,10 +295,11 @@
             1455.569055697763,
             1501.7730245533153
           ]
-        ]
+        ],
+        "concourse": "B"
       },
       {
-        "gate_id": "B11",
+        "gate_id": "B6",
         "size_class": "narrowbody",
         "taxiway": "A",
         "occupancy": [
@@ -284,10 +307,11 @@
             1206.0,
             1289.510790655062
           ]
-        ]
+        ],
+        "concourse": "B"
       },
       {
-        "gate_id": "B12",
+        "gate_id": "C6",
         "size_class": "narrowbody",
         "taxiway": "C",
         "occupancy": [
@@ -299,16 +323,18 @@
             1406.1228243448816,
             1448.4174247428737
           ]
-        ]
+        ],
+        "concourse": "C"
       },
       {
         "gate_id": "REMOTE-1",
         "size_class": "widebody",
         "taxiway": null,
-        "occupancy": []
+        "occupancy": [],
+        "concourse": null
       }
     ],
-    "original_gate": "B11",
+    "original_gate": "B6",
     "shift_end_min": 1320.39538978695,
     "min_turn_min": 35.0,
     "next_departure_min": 1280.0,
@@ -784,7 +810,8 @@
             1423.1082027213174,
             1473.7274984854575
           ]
-        ]
+        ],
+        "concourse": "B"
       },
       {
         "gate_id": "B2",
@@ -803,10 +830,11 @@
             1408.8154512870576,
             1471.4693457962612
           ]
-        ]
+        ],
+        "concourse": "B"
       },
       {
-        "gate_id": "B3",
+        "gate_id": "C1",
         "size_class": "regional",
         "taxiway": "C",
         "occupancy": [
@@ -826,10 +854,11 @@
             1304.8704270427365,
             1351.2792509064043
           ]
-        ]
+        ],
+        "concourse": "C"
       },
       {
-        "gate_id": "B4",
+        "gate_id": "B3",
         "size_class": "narrowbody",
         "taxiway": "C",
         "occupancy": [
@@ -849,10 +878,11 @@
             1438.420322210935,
             1503.1171123241684
           ]
-        ]
+        ],
+        "concourse": "B"
       },
       {
-        "gate_id": "B5",
+        "gate_id": "C2",
         "size_class": "narrowbody",
         "taxiway": "C",
         "occupancy": [
@@ -864,10 +894,11 @@
             1408.2905765706898,
             1443.8263541849253
           ]
-        ]
+        ],
+        "concourse": "C"
       },
       {
-        "gate_id": "B6",
+        "gate_id": "C3",
         "size_class": "narrowbody",
         "taxiway": "C",
         "occupancy": [
@@ -879,10 +910,11 @@
             1457.4938355384054,
             1495.0548184682145
           ]
-        ]
+        ],
+        "concourse": "C"
       },
       {
-        "gate_id": "B7",
+        "gate_id": "C4",
         "size_class": "regional",
         "taxiway": "B",
         "occupancy": [
@@ -898,10 +930,11 @@
             1452.0338287424058,
             1500.1471786618556
           ]
-        ]
+        ],
+        "concourse": "C"
       },
       {
-        "gate_id": "B8",
+        "gate_id": "B4",
         "size_class": "narrowbody",
         "taxiway": "D",
         "occupancy": [
@@ -917,10 +950,11 @@
             1402.062305234118,
             1454.44439139244
           ]
-        ]
+        ],
+        "concourse": "B"
       },
       {
-        "gate_id": "B9",
+        "gate_id": "C5",
         "size_class": "narrowbody",
         "taxiway": "B",
         "occupancy": [
@@ -936,10 +970,11 @@
             1433.93330106241,
             1478.3998719077827
           ]
-        ]
+        ],
+        "concourse": "C"
       },
       {
-        "gate_id": "B10",
+        "gate_id": "B5",
         "size_class": "widebody",
         "taxiway": "A",
         "occupancy": [
@@ -959,10 +994,11 @@
             1455.569055697763,
             1501.7730245533153
           ]
-        ]
+        ],
+        "concourse": "B"
       },
       {
-        "gate_id": "B11",
+        "gate_id": "B6",
         "size_class": "narrowbody",
         "taxiway": "A",
         "occupancy": [
@@ -970,10 +1006,11 @@
             1206.0,
             1289.510790655062
           ]
-        ]
+        ],
+        "concourse": "B"
       },
       {
-        "gate_id": "B12",
+        "gate_id": "C6",
         "size_class": "narrowbody",
         "taxiway": "C",
         "occupancy": [
@@ -985,13 +1022,15 @@
             1406.1228243448816,
             1448.4174247428737
           ]
-        ]
+        ],
+        "concourse": "C"
       },
       {
         "gate_id": "REMOTE-1",
         "size_class": "widebody",
         "taxiway": null,
-        "occupancy": []
+        "occupancy": [],
+        "concourse": null
       }
     ],
     "alternates": [
@@ -1033,16 +1072,16 @@
     "gates": [
       "B1",
       "B2",
+      "C1",
       "B3",
+      "C2",
+      "C3",
+      "C4",
       "B4",
+      "C5",
       "B5",
       "B6",
-      "B7",
-      "B8",
-      "B9",
-      "B10",
-      "B11",
-      "B12",
+      "C6",
       "REMOTE-1"
     ],
     "alternates": [
@@ -1080,6 +1119,7 @@
     "pilot.connections": "SYNTHETIC",
     "pilot.connecting_pax": "SYNTHETIC",
     "pilot.turbulence_in_hold": "SYNTHETIC",
+    "pilot.transfer_min": "SYNTHETIC",
     "ground.gates": "SYNTHETIC",
     "ground.original_gate": "SYNTHETIC",
     "ground.shift_end_min": "SYNTHETIC",

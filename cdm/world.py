@@ -28,6 +28,7 @@ class RunwaySlot(BaseModel):
 class Gate(BaseModel):
     gate_id: str; size_class: str; taxiway: Optional[str] = None
     occupancy: list[tuple[float, float]] = []
+    concourse: Optional[str] = None                         # None for REMOTE-1
 
 class Alternate(BaseModel):
     iata: str; distance_nm: float; time_min: float
@@ -37,6 +38,11 @@ class TaxiwayClosure(BaseModel):
 
 class ConnectionBank(BaseModel):
     dep_min: float; pax: int
+    concourse: Optional[str] = None                         # None = same concourse as the gate
+
+class TransferTimes(BaseModel):
+    """Minutes from the arrival gate to a connecting departure, by how far apart the concourses are."""
+    same: float; adjacent: float; far: float; remote_bus: float
 
 
 class PublicView(BaseModel):
@@ -49,6 +55,7 @@ class PublicView(BaseModel):
 class PilotState(BaseModel):
     extra_fuel_min: float; fdp_end_min: float; connections: list[ConnectionBank]
     connecting_pax: int; hold_flow_kg_per_min: float; turbulence_in_hold: bool
+    transfer_min: TransferTimes
 
 class GroundState(BaseModel):
     gates: list[Gate]; original_gate: str; shift_end_min: float; min_turn_min: float
@@ -121,9 +128,11 @@ def _params(cfg: Config) -> WorldParams:
     )
 
 
-def _rng(flight_key: str, seed: int) -> np.random.Generator:
-    # sha256, not hash(): Python's hash() changes between runs and would break verify replay
-    digest = hashlib.sha256(f"{flight_key}|{seed}".encode()).digest()
+def _rng(flight_key: str, seed: int, stream: str = "") -> np.random.Generator:
+    # sha256, not hash(): Python's hash() changes between runs and would break verify replay.
+    # A named stream draws extra values without shifting the main one, so existing values stay the same.
+    text = f"{flight_key}|{seed}|{stream}" if stream else f"{flight_key}|{seed}"
+    digest = hashlib.sha256(text.encode()).digest()
     return np.random.default_rng(int.from_bytes(digest[:8], "big"))
 
 
@@ -180,6 +189,23 @@ def _build_gates(rng, eta, category, min_turn, taxi_in, buffer_min, syn) -> tupl
         original.occupancy = [(s, e) for s, e in original.occupancy if s > clear_until or e < eta - buffer_min]
     gates.append(Gate(gate_id=REMOTE_GATE, size_class="widebody"))
     return gates, original.gate_id
+
+
+def _spread_concourses(rng, gates: list[Gate], original: str, syn) -> tuple[list[Gate], str, list[str]]:
+    """Spread the contact gates over 2-3 neighbouring concourses and renumber them, e.g. B1..B4, C1..C5."""
+    letters = "ABCD"
+    count = _randint(rng, syn["concourses"])
+    start = min(letters.index(gates[0].gate_id[0]), len(letters) - count)
+    concourses = list(letters[start:start + count])
+    contact = [g for g in gates if g.gate_id != REMOTE_GATE]
+    numbers = {c: 0 for c in concourses}
+    renamed = {}
+    for gate, position in zip(contact, rng.permutation(len(contact))):
+        concourse = concourses[int(position) % count]
+        numbers[concourse] += 1
+        renamed[gate.gate_id] = f"{concourse}{numbers[concourse]}"
+        gate.gate_id, gate.concourse = renamed[gate.gate_id], concourse
+    return gates, renamed[original], concourses
 
 
 def _build_alternates(rng, destination, syn_alt, cfg: Config) -> list[Alternate]:
@@ -255,6 +281,8 @@ def build_world(row: pd.Series, seed: int, cfg: Config) -> World:
     fdp_end = eta + _uniform(rng, syn["fdp_end_after_eta_min"])
     slots = _build_slots(rng, eta, extra_fuel, stress, syn)
     gates, original_gate = _build_gates(rng, eta, category, min_turn, taxi_in, buffer_min, syn)
+    layout = _rng(key, seed, "layout")
+    gates, original_gate, concourses = _spread_concourses(layout, gates, original_gate, syn)
 
     # Shift end. In an overtime stress world even an immediate landing exceeds the cap.
     if stress == "overtime":
@@ -272,6 +300,9 @@ def build_world(row: pd.Series, seed: int, cfg: Config) -> World:
     bank_pax = rng.multinomial(connecting, np.full(banks, 1 / banks))
     connections = [ConnectionBank(dep_min=eta + _uniform(rng, syn["connection_dep_after_eta_min"]), pax=int(p))
                    for p in bank_pax if p]
+    for bank in connections:
+        bank.concourse = str(layout.choice(concourses))
+    transfer = TransferTimes(**{k: _uniform(layout, v) for k, v in syn["transfer_min"].items()})
 
     destination = str(row["DESTINATION_AIRPORT"])
     alternates = _build_alternates(rng, destination, syn["alternates"], cfg)
@@ -293,7 +324,7 @@ def build_world(row: pd.Series, seed: int, cfg: Config) -> World:
     pilot = PilotState(
         extra_fuel_min=extra_fuel, fdp_end_min=fdp_end, connections=connections, connecting_pax=connecting,
         hold_flow_kg_per_min=float(cfg.costs["holding_flow_kg_per_min"][category]),
-        turbulence_in_hold=facts.turbulence_in_hold,
+        turbulence_in_hold=facts.turbulence_in_hold, transfer_min=transfer,
     )
     ground = GroundState(gates=gates, original_gate=original_gate, shift_end_min=shift_end, min_turn_min=min_turn,
                          next_departure_min=next_departure, next_departure_is_real=bool(next_is_real))
@@ -322,7 +353,7 @@ def _tags(taxi_real: bool, next_real: bool) -> dict[str, Tag]:
         "pilot.hold_flow_kg_per_min": "ASSUMED_CONST", "ground.min_turn_min": "ASSUMED_CONST",
         "ground.next_departure_min": "REAL" if next_real else "SYNTHETIC", "ground.next_departure_is_real": "REAL",
     })
-    for field in ("extra_fuel_min", "fdp_end_min", "connections", "connecting_pax", "turbulence_in_hold"):
+    for field in ("extra_fuel_min", "fdp_end_min", "connections", "connecting_pax", "turbulence_in_hold", "transfer_min"):
         tags[f"pilot.{field}"] = "SYNTHETIC"
     for field in ("gates", "original_gate", "shift_end_min"):
         tags[f"ground.{field}"] = "SYNTHETIC"
@@ -364,6 +395,18 @@ def timeline(option: Option, world: World) -> Timeline:
     return Timeline(hold, landing, landing + taxi_in, False, gate, slot)
 
 
+def transfer_min(gate: Optional[Gate], bank: ConnectionBank, world: World) -> float:
+    """Walk or bus time from the arrival gate to the bank's concourse. An unknown gate gets the longest one."""
+    times = world.pilot.transfer_min
+    if gate is None:
+        return max(times.far, times.remote_bus + times.same)
+    if gate.concourse is None:
+        return times.remote_bus + times.same
+    if bank.concourse is None or bank.concourse == gate.concourse:
+        return times.same
+    return times.adjacent if abs(ord(bank.concourse) - ord(gate.concourse)) == 1 else times.far
+
+
 def _gate_overlap(start: float, end: float, gate: Optional[Gate], buffer_min: float) -> float:
     if gate is None:
         return 0.0
@@ -397,7 +440,8 @@ def derive(option: Option, world: World) -> Derived:
         overlap = _gate_overlap(line.on_block_min, line.on_block_min + min_turn, line.gate, world.params.gate_buffer_min)
         overtime = max(0.0, line.on_block_min + min_turn - world.ground.shift_end_min)
         mct = world.cost("min_connection_time_min")
-        missed = sum(b.pax for b in world.pilot.connections if line.on_block_min + mct > b.dep_min)
+        missed = sum(b.pax for b in world.pilot.connections
+                     if line.on_block_min + mct + transfer_min(line.gate, b, world) > b.dep_min)
     # A diverted aircraft never reaches a gate here, so it has no landing or on-block time at the destination
     return Derived(
         landing_time=None if line.diverted else world.fmt_clock(line.landing_min),
