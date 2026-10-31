@@ -1,0 +1,16 @@
+IATA_CODE,AIRPORT,CITY,STATE,COUNTRY,LATITUDE,LONGITUDE
+ATL,Hartsfield-Jackson Atlanta,Atlanta,GA,USA,33.64,-84.43
+AHN,Athens,Athens,GA,USA,33.95,-83.33
+CSG,Columbus,Columbus,GA,USA,32.52,-84.94
+BHM,Birmingham,Birmingham,AL,USA,33.56,-86.75
+CHA,Chattanooga,Chattanooga,TN,USA,35.04,-85.20
+AGS,Augusta,Augusta,GA,USA,33.37,-81.96
+ORD,Chicago O'Hare,Chicago,IL,USA,41.98,-87.90
+MDW,Chicago Midway,Chicago,IL,USA,41.79,-87.74
+MKE,Milwaukee,Milwaukee,WI,USA,42.95,-87.90
+SBN,South Bend,South Bend,IN,USA,41.71,-86.32
+LAX,Los Angeles,Los Angeles,CA,USA,33.94,-118.41
+SAN,San Diego,San Diego,CA,USA,32.73,-117.19
+PSP,Palm Springs,Palm Springs,CA,USA,33.83,-116.51
+SBA,Santa Barbara,Santa Barbara,CA,USA,34.43,-119.84
+ECP,Northwest Florida Beaches,Panama City,FL,USA,,

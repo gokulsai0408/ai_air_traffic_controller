@@ -1,0 +1,1100 @@
+{
+  "flight_key": "20150612-DL1234-ORD-ATL-1630",
+  "seed": 0,
+  "config_hash": "216453595b5658be",
+  "base_date": "2015-06-12",
+  "params": {
+    "gate_buffer_min": 10.0,
+    "wake_pairs_nm": {
+      "H-H": 4.0,
+      "H-M": 5.0,
+      "H-L": 6.0,
+      "M-L": 5.0,
+      "J-H": 6.0,
+      "J-M": 7.0,
+      "J-L": 8.0
+    },
+    "wake_default_nm": 3.0,
+    "approach_speed_kt": 140.0,
+    "costs": {
+      "cost_per_delay_min": 67.7,
+      "fuel_price_usd_per_kg": 0.54,
+      "cost_per_missed_pax": 250.0,
+      "divert_fixed": 15000.0,
+      "turbulence_hold_penalty_per_min": 20.0,
+      "gate_change_fixed": 300.0,
+      "remote_stand_cost": 1200.0,
+      "overtime_rate_per_min": 15.0,
+      "turn_penalty_per_min": 40.0,
+      "holding_workload_per_min": 25.0,
+      "stack_congestion_per_aircraft": 5.0,
+      "runway_minute_value": 60.0,
+      "divert_coordination_cost": 800.0,
+      "min_connection_time_min": 45.0
+    }
+  },
+  "public": {
+    "flight_key": "20150612-DL1234-ORD-ATL-1630",
+    "airline": "DL",
+    "flight_number": "1234",
+    "tail_number": "N100DL",
+    "origin": "ORD",
+    "destination": "ATL",
+    "date": "2015-06-12",
+    "distance_nm": 606.0,
+    "sched_arrival_min": 1190.0,
+    "arrival_delay_min": 45.0,
+    "taxi_in_min": 9.0,
+    "weather_delay_min": 30.0,
+    "late_aircraft_delay_min": 0.0,
+    "air_system_delay_min": 15.0,
+    "eta_min": 1226.0,
+    "t0_min": 1181.0,
+    "aircraft_category": "narrowbody",
+    "wake": "M",
+    "ops_notes": "TWY B closed until 2050L."
+  },
+  "pilot": {
+    "extra_fuel_min": 13.62932169195686,
+    "fdp_end_min": 1332.6465591026608,
+    "connections": [
+      {
+        "dep_min": 1291.9495296980201,
+        "pax": 14
+      },
+      {
+        "dep_min": 1303.8050726458546,
+        "pax": 15
+      },
+      {
+        "dep_min": 1312.6589156740101,
+        "pax": 13
+      },
+      {
+        "dep_min": 1364.9924111162004,
+        "pax": 11
+      }
+    ],
+    "connecting_pax": 53,
+    "hold_flow_kg_per_min": 40.0,
+    "turbulence_in_hold": false
+  },
+  "ground": {
+    "gates": [
+      {
+        "gate_id": "B1",
+        "size_class": "widebody",
+        "taxiway": "C",
+        "occupancy": [
+          [
+            1187.7127085443578,
+            1240.8259196603517
+          ],
+          [
+            1385.7507683683107,
+            1448.5359139502266
+          ],
+          [
+            1423.1082027213174,
+            1473.7274984854575
+          ]
+        ]
+      },
+      {
+        "gate_id": "B2",
+        "size_class": "narrowbody",
+        "taxiway": "B",
+        "occupancy": [
+          [
+            1365.3616424378426,
+            1402.7878164638814
+          ],
+          [
+            1404.6444006539307,
+            1440.538333782927
+          ],
+          [
+            1408.8154512870576,
+            1471.4693457962612
+          ]
+        ]
+      },
+      {
+        "gate_id": "B3",
+        "size_class": "regional",
+        "taxiway": "C",
+        "occupancy": [
+          [
+            1167.9142171002493,
+            1227.0995152890603
+          ],
+          [
+            1180.8536024875752,
+            1218.3765766553063
+          ],
+          [
+            1301.4721870072603,
+            1346.1212158024027
+          ],
+          [
+            1304.8704270427365,
+            1351.2792509064043
+          ]
+        ]
+      },
+      {
+        "gate_id": "B4",
+        "size_class": "narrowbody",
+        "taxiway": "C",
+        "occupancy": [
+          [
+            1332.7671981228261,
+            1391.5050774879273
+          ],
+          [
+            1333.364495312788,
+            1393.509904690652
+          ],
+          [
+            1361.9203875008827,
+            1414.9493294872325
+          ],
+          [
+            1438.420322210935,
+            1503.1171123241684
+          ]
+        ]
+      },
+      {
+        "gate_id": "B5",
+        "size_class": "narrowbody",
+        "taxiway": "C",
+        "occupancy": [
+          [
+            1249.6275087392817,
+            1289.2812461205428
+          ],
+          [
+            1408.2905765706898,
+            1443.8263541849253
+          ]
+        ]
+      },
+      {
+        "gate_id": "B6",
+        "size_class": "narrowbody",
+        "taxiway": "C",
+        "occupancy": [
+          [
+            1173.4432359494006,
+            1218.527620887023
+          ],
+          [
+            1457.4938355384054,
+            1495.0548184682145
+          ]
+        ]
+      },
+      {
+        "gate_id": "B7",
+        "size_class": "regional",
+        "taxiway": "B",
+        "occupancy": [
+          [
+            1309.437774620737,
+            1357.5132176743439
+          ],
+          [
+            1338.211673394634,
+            1373.3097421854475
+          ],
+          [
+            1452.0338287424058,
+            1500.1471786618556
+          ]
+        ]
+      },
+      {
+        "gate_id": "B8",
+        "size_class": "narrowbody",
+        "taxiway": "D",
+        "occupancy": [
+          [
+            1243.5124448301517,
+            1304.0763236602127
+          ],
+          [
+            1397.635877125278,
+            1460.5196059486132
+          ],
+          [
+            1402.062305234118,
+            1454.44439139244
+          ]
+        ]
+      },
+      {
+        "gate_id": "B9",
+        "size_class": "narrowbody",
+        "taxiway": "B",
+        "occupancy": [
+          [
+            1352.4864718396714,
+            1404.7308990319777
+          ],
+          [
+            1384.6792094062478,
+            1453.8601177549249
+          ],
+          [
+            1433.93330106241,
+            1478.3998719077827
+          ]
+        ]
+      },
+      {
+        "gate_id": "B10",
+        "size_class": "widebody",
+        "taxiway": "A",
+        "occupancy": [
+          [
+            1209.5903594367396,
+            1267.5816615435035
+          ],
+          [
+            1292.4845495240097,
+            1362.0429227874092
+          ],
+          [
+            1369.1229239766203,
+            1433.833454610362
+          ],
+          [
+            1455.569055697763,
+            1501.7730245533153
+          ]
+        ]
+      },
+      {
+        "gate_id": "B11",
+        "size_class": "narrowbody",
+        "taxiway": "A",
+        "occupancy": [
+          [
+            1206.0,
+            1289.510790655062
+          ]
+        ]
+      },
+      {
+        "gate_id": "B12",
+        "size_class": "narrowbody",
+        "taxiway": "C",
+        "occupancy": [
+          [
+            1243.7818743882617,
+            1295.9993950620658
+          ],
+          [
+            1406.1228243448816,
+            1448.4174247428737
+          ]
+        ]
+      },
+      {
+        "gate_id": "REMOTE-1",
+        "size_class": "widebody",
+        "taxiway": null,
+        "occupancy": []
+      }
+    ],
+    "original_gate": "B11",
+    "shift_end_min": 1320.39538978695,
+    "min_turn_min": 35.0,
+    "next_departure_min": 1280.0,
+    "next_departure_is_real": true
+  },
+  "atc": {
+    "aar_per_hour": 30.0,
+    "slots": [
+      {
+        "slot_id": "S-00",
+        "time_min": 1216.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-01",
+        "time_min": 1218.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-02",
+        "time_min": 1220.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-03",
+        "time_min": 1222.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-04",
+        "time_min": 1224.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-05",
+        "time_min": 1226.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-06",
+        "time_min": 1228.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-07",
+        "time_min": 1230.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-08",
+        "time_min": 1232.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-09",
+        "time_min": 1234.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-10",
+        "time_min": 1236.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-11",
+        "time_min": 1238.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-12",
+        "time_min": 1240.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-13",
+        "time_min": 1242.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-14",
+        "time_min": 1244.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-15",
+        "time_min": 1246.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-16",
+        "time_min": 1248.0,
+        "occupied": true,
+        "wake": "H"
+      },
+      {
+        "slot_id": "S-17",
+        "time_min": 1250.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-18",
+        "time_min": 1252.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-19",
+        "time_min": 1254.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-20",
+        "time_min": 1256.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-21",
+        "time_min": 1258.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-22",
+        "time_min": 1260.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-23",
+        "time_min": 1262.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-24",
+        "time_min": 1264.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-25",
+        "time_min": 1266.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-26",
+        "time_min": 1268.0,
+        "occupied": true,
+        "wake": "H"
+      },
+      {
+        "slot_id": "S-27",
+        "time_min": 1270.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-28",
+        "time_min": 1272.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-29",
+        "time_min": 1274.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-30",
+        "time_min": 1276.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-31",
+        "time_min": 1278.0,
+        "occupied": true,
+        "wake": "H"
+      },
+      {
+        "slot_id": "S-32",
+        "time_min": 1280.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-33",
+        "time_min": 1282.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-34",
+        "time_min": 1284.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-35",
+        "time_min": 1286.0,
+        "occupied": true,
+        "wake": "H"
+      }
+    ],
+    "taxiway_closures": [
+      {
+        "taxiway": "B",
+        "until_min": 1250.0
+      }
+    ]
+  },
+  "safety_view": {
+    "eta_min": 1226.0,
+    "aircraft_category": "narrowbody",
+    "wake": "M",
+    "extra_fuel_min": 13.62932169195686,
+    "alternate_reserve_min": 21.6,
+    "fdp_end_min": 1332.6465591026608,
+    "slots": [
+      {
+        "slot_id": "S-00",
+        "time_min": 1216.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-01",
+        "time_min": 1218.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-02",
+        "time_min": 1220.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-03",
+        "time_min": 1222.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-04",
+        "time_min": 1224.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-05",
+        "time_min": 1226.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-06",
+        "time_min": 1228.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-07",
+        "time_min": 1230.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-08",
+        "time_min": 1232.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-09",
+        "time_min": 1234.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-10",
+        "time_min": 1236.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-11",
+        "time_min": 1238.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-12",
+        "time_min": 1240.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-13",
+        "time_min": 1242.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-14",
+        "time_min": 1244.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-15",
+        "time_min": 1246.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-16",
+        "time_min": 1248.0,
+        "occupied": true,
+        "wake": "H"
+      },
+      {
+        "slot_id": "S-17",
+        "time_min": 1250.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-18",
+        "time_min": 1252.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-19",
+        "time_min": 1254.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-20",
+        "time_min": 1256.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-21",
+        "time_min": 1258.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-22",
+        "time_min": 1260.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-23",
+        "time_min": 1262.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-24",
+        "time_min": 1264.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-25",
+        "time_min": 1266.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-26",
+        "time_min": 1268.0,
+        "occupied": true,
+        "wake": "H"
+      },
+      {
+        "slot_id": "S-27",
+        "time_min": 1270.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-28",
+        "time_min": 1272.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-29",
+        "time_min": 1274.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-30",
+        "time_min": 1276.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-31",
+        "time_min": 1278.0,
+        "occupied": true,
+        "wake": "H"
+      },
+      {
+        "slot_id": "S-32",
+        "time_min": 1280.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-33",
+        "time_min": 1282.0,
+        "occupied": false,
+        "wake": null
+      },
+      {
+        "slot_id": "S-34",
+        "time_min": 1284.0,
+        "occupied": true,
+        "wake": "M"
+      },
+      {
+        "slot_id": "S-35",
+        "time_min": 1286.0,
+        "occupied": true,
+        "wake": "H"
+      }
+    ],
+    "gates": [
+      {
+        "gate_id": "B1",
+        "size_class": "widebody",
+        "taxiway": "C",
+        "occupancy": [
+          [
+            1187.7127085443578,
+            1240.8259196603517
+          ],
+          [
+            1385.7507683683107,
+            1448.5359139502266
+          ],
+          [
+            1423.1082027213174,
+            1473.7274984854575
+          ]
+        ]
+      },
+      {
+        "gate_id": "B2",
+        "size_class": "narrowbody",
+        "taxiway": "B",
+        "occupancy": [
+          [
+            1365.3616424378426,
+            1402.7878164638814
+          ],
+          [
+            1404.6444006539307,
+            1440.538333782927
+          ],
+          [
+            1408.8154512870576,
+            1471.4693457962612
+          ]
+        ]
+      },
+      {
+        "gate_id": "B3",
+        "size_class": "regional",
+        "taxiway": "C",
+        "occupancy": [
+          [
+            1167.9142171002493,
+            1227.0995152890603
+          ],
+          [
+            1180.8536024875752,
+            1218.3765766553063
+          ],
+          [
+            1301.4721870072603,
+            1346.1212158024027
+          ],
+          [
+            1304.8704270427365,
+            1351.2792509064043
+          ]
+        ]
+      },
+      {
+        "gate_id": "B4",
+        "size_class": "narrowbody",
+        "taxiway": "C",
+        "occupancy": [
+          [
+            1332.7671981228261,
+            1391.5050774879273
+          ],
+          [
+            1333.364495312788,
+            1393.509904690652
+          ],
+          [
+            1361.9203875008827,
+            1414.9493294872325
+          ],
+          [
+            1438.420322210935,
+            1503.1171123241684
+          ]
+        ]
+      },
+      {
+        "gate_id": "B5",
+        "size_class": "narrowbody",
+        "taxiway": "C",
+        "occupancy": [
+          [
+            1249.6275087392817,
+            1289.2812461205428
+          ],
+          [
+            1408.2905765706898,
+            1443.8263541849253
+          ]
+        ]
+      },
+      {
+        "gate_id": "B6",
+        "size_class": "narrowbody",
+        "taxiway": "C",
+        "occupancy": [
+          [
+            1173.4432359494006,
+            1218.527620887023
+          ],
+          [
+            1457.4938355384054,
+            1495.0548184682145
+          ]
+        ]
+      },
+      {
+        "gate_id": "B7",
+        "size_class": "regional",
+        "taxiway": "B",
+        "occupancy": [
+          [
+            1309.437774620737,
+            1357.5132176743439
+          ],
+          [
+            1338.211673394634,
+            1373.3097421854475
+          ],
+          [
+            1452.0338287424058,
+            1500.1471786618556
+          ]
+        ]
+      },
+      {
+        "gate_id": "B8",
+        "size_class": "narrowbody",
+        "taxiway": "D",
+        "occupancy": [
+          [
+            1243.5124448301517,
+            1304.0763236602127
+          ],
+          [
+            1397.635877125278,
+            1460.5196059486132
+          ],
+          [
+            1402.062305234118,
+            1454.44439139244
+          ]
+        ]
+      },
+      {
+        "gate_id": "B9",
+        "size_class": "narrowbody",
+        "taxiway": "B",
+        "occupancy": [
+          [
+            1352.4864718396714,
+            1404.7308990319777
+          ],
+          [
+            1384.6792094062478,
+            1453.8601177549249
+          ],
+          [
+            1433.93330106241,
+            1478.3998719077827
+          ]
+        ]
+      },
+      {
+        "gate_id": "B10",
+        "size_class": "widebody",
+        "taxiway": "A",
+        "occupancy": [
+          [
+            1209.5903594367396,
+            1267.5816615435035
+          ],
+          [
+            1292.4845495240097,
+            1362.0429227874092
+          ],
+          [
+            1369.1229239766203,
+            1433.833454610362
+          ],
+          [
+            1455.569055697763,
+            1501.7730245533153
+          ]
+        ]
+      },
+      {
+        "gate_id": "B11",
+        "size_class": "narrowbody",
+        "taxiway": "A",
+        "occupancy": [
+          [
+            1206.0,
+            1289.510790655062
+          ]
+        ]
+      },
+      {
+        "gate_id": "B12",
+        "size_class": "narrowbody",
+        "taxiway": "C",
+        "occupancy": [
+          [
+            1243.7818743882617,
+            1295.9993950620658
+          ],
+          [
+            1406.1228243448816,
+            1448.4174247428737
+          ]
+        ]
+      },
+      {
+        "gate_id": "REMOTE-1",
+        "size_class": "widebody",
+        "taxiway": null,
+        "occupancy": []
+      }
+    ],
+    "alternates": [
+      {
+        "iata": "AHN",
+        "distance_nm": 58.0,
+        "time_min": 21.6
+      },
+      {
+        "iata": "CSG",
+        "distance_nm": 72.0,
+        "time_min": 24.4
+      },
+      {
+        "iata": "CHA",
+        "distance_nm": 92.3,
+        "time_min": 28.5
+      }
+    ],
+    "taxiway_closures": [
+      {
+        "taxiway": "B",
+        "until_min": 1250.0
+      }
+    ],
+    "gates_unavailable": []
+  },
+  "menus": {
+    "slots": [
+      "S-09",
+      "S-18",
+      "S-19",
+      "S-20",
+      "S-21",
+      "S-23",
+      "S-29",
+      "S-33"
+    ],
+    "gates": [
+      "B1",
+      "B2",
+      "B3",
+      "B4",
+      "B5",
+      "B6",
+      "B7",
+      "B8",
+      "B9",
+      "B10",
+      "B11",
+      "B12",
+      "REMOTE-1"
+    ],
+    "alternates": [
+      "AHN",
+      "CSG",
+      "CHA"
+    ]
+  },
+  "tags": {
+    "public.flight_key": "REAL",
+    "public.airline": "REAL",
+    "public.flight_number": "REAL",
+    "public.tail_number": "REAL",
+    "public.origin": "REAL",
+    "public.destination": "REAL",
+    "public.date": "REAL",
+    "public.distance_nm": "REAL",
+    "public.sched_arrival_min": "REAL",
+    "public.arrival_delay_min": "REAL",
+    "public.weather_delay_min": "REAL",
+    "public.late_aircraft_delay_min": "REAL",
+    "public.air_system_delay_min": "REAL",
+    "public.eta_min": "REAL",
+    "public.t0_min": "REAL",
+    "public.taxi_in_min": "REAL",
+    "public.aircraft_category": "ASSUMED_CONST",
+    "public.wake": "ASSUMED_CONST",
+    "public.ops_notes": "SYNTHETIC",
+    "pilot.hold_flow_kg_per_min": "ASSUMED_CONST",
+    "ground.min_turn_min": "ASSUMED_CONST",
+    "ground.next_departure_min": "REAL",
+    "ground.next_departure_is_real": "REAL",
+    "pilot.extra_fuel_min": "SYNTHETIC",
+    "pilot.fdp_end_min": "SYNTHETIC",
+    "pilot.connections": "SYNTHETIC",
+    "pilot.connecting_pax": "SYNTHETIC",
+    "pilot.turbulence_in_hold": "SYNTHETIC",
+    "ground.gates": "SYNTHETIC",
+    "ground.original_gate": "SYNTHETIC",
+    "ground.shift_end_min": "SYNTHETIC",
+    "atc.aar_per_hour": "SYNTHETIC",
+    "atc.slots": "SYNTHETIC",
+    "atc.taxiway_closures": "SYNTHETIC"
+  },
+  "ops_ground_truth": {
+    "taxiway_closures": [
+      "B"
+    ],
+    "gates_unavailable": [],
+    "turbulence_in_hold": false,
+    "runway_config_change": null,
+    "uncertain": false
+  },
+  "stress": null
+}
