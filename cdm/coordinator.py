@@ -14,7 +14,7 @@ from typing import Any, Callable, Optional
 
 from pydantic import BaseModel, ValidationError
 
-from cdm.agents.base import ROLES, Agent
+from cdm.agents.base import ROLES, Agent, merge_facts
 from cdm.schemas import (ActionType, Assessment, CClass, Decision, Escalation, KernelReport, OpsFacts, Option,
                          OptionDraft, Reason, Vote)
 
@@ -38,13 +38,15 @@ class Deps:
     seed_options: Callable[[Any], list[Option]]
     do_nothing: Callable[[Any], Option]
     fallback_plan: Callable[[Any], Option]
+    apply_facts: Optional[Callable[[Any, OpsFacts], Any]] = None   # tighten-only; None leaves the world as is
 
     @classmethod
     def default(cls) -> "Deps":
         from cdm.fallback import fallback_plan
-        from cdm.kernel import check
+        from cdm.kernel import apply_facts, check
         from cdm.options import do_nothing, seed_options
-        return cls(check=check, seed_options=seed_options, do_nothing=do_nothing, fallback_plan=fallback_plan)
+        return cls(check=check, seed_options=seed_options, do_nothing=do_nothing, fallback_plan=fallback_plan,
+                   apply_facts=apply_facts)
 
 
 class ListLedger:
@@ -253,11 +255,17 @@ class _Negotiation:
 
         notes = _ops_notes(w)
         read = self.call_agents("read_ops", {r: (lambda a=a: a.read_ops(notes)) for r, a in self.agents.items()})
+        self.facts = OpsFacts()
         for role in ROLES:
             facts = read[role]
             if not isinstance(facts, OpsFacts):
                 facts = OpsFacts(uncertain=True)
             self.log("OPS_FACTS", role, facts)
+            self.facts = merge_facts(self.facts, facts)
+        # Every kernel check, plan and assessment below uses the world tightened by all three agents' readings
+        # of the notes. Facts can only add closures, so a misreading can block a plan but never unblock one.
+        if self.deps.apply_facts is not None:
+            self.world = w = self.deps.apply_facts(w, self.facts)
 
         dn, fb = self.deps.do_nothing(w), self.deps.fallback_plan(w)
         dn_rep, fb_rep = self.kcheck(dn), self.kcheck(fb)
@@ -299,8 +307,11 @@ class _Negotiation:
             for o in new:
                 self.kcheck(o)
             checked = new if rnd > 1 else list(self.pool.values())
-            self.log("KERNEL", "kernel", {"round": rnd, "reports": [self.reports[o.option_id] for o in checked]},
-                     _ids(*(self.reports[o.option_id] for o in checked)))
+            # options + facts let verify rebuild and re-check every option, including agent-invented ones
+            kernel_entry = {"round": rnd, "reports": [self.reports[o.option_id] for o in checked], "options": checked}
+            if rnd == 1:
+                kernel_entry["facts"] = self.facts
+            self.log("KERNEL", "kernel", kernel_entry, _ids(*(self.reports[o.option_id] for o in checked)))
             feasible = [o for o in self.pool.values() if self.ok(o.option_id)]
             if not feasible:
                 return self.escalate(rnd)

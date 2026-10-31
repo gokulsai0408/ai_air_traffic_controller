@@ -242,3 +242,25 @@ def test_ops_gate_unavailable_makes_ground_reject():
     ground_facts = next(e for e in ledger.entries if e["type"] == "OPS_FACTS" and e["actor"] == "ground")
     assert ground_facts["payload"]["gates_unavailable"] == ["B7"]
     assert d.option.gate_id != "B7"                  # G-002 (gate B7) was the consensus without the note
+
+
+def test_agents_ops_facts_reach_the_kernel_and_are_logged_for_replay():
+    w = FakeWorld(base_specs(), ops_notes="Gate B7 out of service.")
+    d, ledger = run(w)
+    kernel1 = next(e for e in ledger.entries if e["type"] == "KERNEL")
+    assert kernel1["payload"]["facts"]["gates_unavailable"] == ["B7"]
+    g002 = next(r for r in kernel1["payload"]["reports"] if r["option_id"] == "G-002")
+    assert g002["safe"] is False and "C-TAXI-01" in kernel1["constraint_ids"]   # blocked by the kernel, not a vote
+    assert d.option.gate_id != "B7" and fake_check(d.option, w).safe
+    assert w.closed_gates == frozenset()                                       # the caller's world is not mutated
+
+
+def test_kernel_entries_carry_every_checked_option_for_replay():
+    class Inventor(RuleAgent):
+        def propose(self, view):
+            return [{"action_type": "HOLD", "hold_minutes": 7, "slot_id": "S-5", "gate_id": "B4"}]
+
+    _, ledger = run(FakeWorld(base_specs()), agents_with("ground", Inventor))
+    logged = {o["option_id"] for e in ledger.entries if e["type"] == "KERNEL" for o in e["payload"]["options"]}
+    reported = {r["option_id"] for e in ledger.entries if e["type"] == "KERNEL" for r in e["payload"]["reports"]}
+    assert any(oid.startswith("G-1-") for oid in logged) and reported <= logged

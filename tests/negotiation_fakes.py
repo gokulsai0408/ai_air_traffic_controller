@@ -2,12 +2,12 @@
 before those modules land. Each option's Derived values, per-role costs and kernel failures are scripted."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Optional
 
 from cdm.agents import make_agents
 from cdm.coordinator import Deps
-from cdm.schemas import CClass, ConstraintResult, Derived, KernelReport, Option, OptionDraft
+from cdm.schemas import CClass, ConstraintResult, Derived, KernelReport, OpsFacts, Option, OptionDraft
 
 CONSTRAINTS = {
     "C-SCHEMA-01": CClass.PHYSICAL, "C-REF-01": CClass.PHYSICAL, "C-CONSIST-01": CClass.PHYSICAL,
@@ -48,6 +48,7 @@ class FakeWorld:
     ground: dict = field(default_factory=lambda: {"shift_end": "21:00"})
     atc: dict = field(default_factory=lambda: {"aar": 30})
     menus: dict = field(default_factory=dict)
+    closed_gates: frozenset = frozenset()           # safety-view gates_unavailable; grows only via fake_apply_facts
 
     @property
     def public(self) -> dict:
@@ -75,6 +76,8 @@ def fake_cost(i: int):
 def fake_check(option: Option, world: FakeWorld) -> KernelReport:
     spec = world.spec_for(option)
     fails = dict(spec.fails) if spec else {"C-REF-01": -1.0}
+    if option.gate_id in world.closed_gates:
+        fails.setdefault("C-TAXI-01", -1.0)
     results = [ConstraintResult(id=cid, cls=cls, status="FAIL" if cid in fails else "PASS",
                                 margin=fails.get(cid, 1.0), unit="min", source="fake")
                for cid, cls in CONSTRAINTS.items()]
@@ -83,8 +86,12 @@ def fake_check(option: Option, world: FakeWorld) -> KernelReport:
     return KernelReport(option_id=option.option_id, results=results, safe=safe, policy_ok=policy_ok)
 
 
+def fake_apply_facts(world: FakeWorld, facts: OpsFacts) -> FakeWorld:
+    return replace(world, closed_gates=world.closed_gates | frozenset(facts.gates_unavailable))
+
+
 def fake_deps() -> Deps:
-    return Deps(check=fake_check,
+    return Deps(check=fake_check, apply_facts=fake_apply_facts,
                 seed_options=lambda w: [s.option for s in w.specs
                                         if s.option.option_id not in (w.fallback_id, w.do_nothing_id)],
                 do_nothing=lambda w: w.by_id(w.do_nothing_id),
