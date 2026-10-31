@@ -18,7 +18,7 @@ from typing import Any, Literal, Optional, Type, TypeVar
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from cdm.agents.base import AssessingAgent, CostFn, DeriveFn, merge_facts, parse_ops_rules
-from cdm.agents.llm_client import MODEL, LLMClient, LLMError, complete
+from cdm.agents.llm_client import MODEL, LLMAuthError, LLMClient, LLMError, complete
 from cdm.agents.rule import RuleAgent
 from cdm.schemas import OpsFacts, OptionDraft, Reason, Role, Vote
 
@@ -109,18 +109,21 @@ class LLMAgent(AssessingAgent):
         schema = model.model_json_schema()
         for attempt in range(1, ATTEMPTS + 1):
             started = time.perf_counter()
-            raw, error, parsed = None, None, None
+            raw, error, parsed, error_obj = None, None, None, None
             try:
                 raw = self.client(system, user, schema)
                 parsed = model.model_validate_json(raw)
             except (LLMError, ValidationError, ValueError) as e:
-                error = f"{type(e).__name__}: {e}"[:1000]
+                error, error_obj = f"{type(e).__name__}: {e}"[:1000], e
             self._events.append(("LLM_CALL", {
                 "agent": self.role, "purpose": purpose, "attempt": attempt, "model": MODEL,
                 "system": system, "user": user, "schema": model.__name__, "response": raw,
                 "ok": parsed is not None, "error": error, "latency_s": round(time.perf_counter() - started, 3)}))
             if parsed is not None:
                 return parsed
+            if isinstance(error_obj, LLMAuthError):
+                self._degrade(f"{purpose} ({error_obj})")    # bad credentials: no retry, no further LLM calls
+                return None
         return None
 
     def _degrade(self, purpose: str) -> None:

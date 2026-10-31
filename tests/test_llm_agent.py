@@ -155,3 +155,19 @@ def test_rationales_redact_private_numbers_but_keep_ids():
     clients = {r: FakeLLM(rationale="we have 12.5 min of fuel left") for r in ROLES}
     d, _ = run(FakeWorld(base_specs()), clients)
     assert d.votes and all("12.5" not in v.rationale for v in d.votes)
+
+
+def test_auth_error_is_not_retried_and_switches_to_rule_immediately():
+    from cdm.agents.llm_client import LLMAuthError
+
+    class NoKey(FakeLLM):
+        def __call__(self, system, user, schema):
+            self.calls.append(schema["title"])
+            raise LLMAuthError("API error 401: check ANTHROPIC_API_KEY")
+
+    clients = {r: NoKey() for r in ROLES}
+    world = FakeWorld(base_specs(), ops_notes="MOD TURB reported in holding.")
+    d, ledger = run(world, clients)
+    assert all(c.calls == ["OpsFacts"] for c in clients.values())               # one call per agent, no retry
+    assert len(entries(ledger, "AGENT_FALLBACK")) == 3
+    assert d.outcome == "CONSENSUS" and d.kernel.safe

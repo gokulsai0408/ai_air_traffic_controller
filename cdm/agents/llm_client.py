@@ -33,6 +33,10 @@ class LLMError(RuntimeError):
     """Any failed call: transport error, timeout, refusal, truncation or no text."""
 
 
+class LLMAuthError(LLMError):
+    """Missing/invalid credentials or no permission: retrying cannot help."""
+
+
 def api_schema(schema: dict) -> dict:
     """Copy of a pydantic JSON schema reduced to what structured outputs accepts."""
     def clean(node: Any) -> Any:
@@ -96,6 +100,8 @@ def complete(system: str, user: str, json_schema: dict) -> str:
             resp = client.messages.create(**params)
     except anthropic.APITimeoutError as e:
         raise LLMError(f"timeout after {TIMEOUT_S}s") from e
+    except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
+        raise LLMAuthError(f"API error {e.status_code}: check ANTHROPIC_API_KEY") from e
     except anthropic.RateLimitError as e:
         raise LLMError("rate limited") from e
     except anthropic.APIStatusError as e:
