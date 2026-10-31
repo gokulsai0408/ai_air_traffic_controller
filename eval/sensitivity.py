@@ -1,6 +1,6 @@
 """E6 sensitivity: scale each assumed parameter by +/-30% and see what the conclusions do.
 
-Paths point into config/*.yaml. A path that is not in the config is reported as SKIPPED,
+Keys point into config/synthetic.yaml and config/costs.yaml. A key that is not in the config is reported as SKIPPED,
 so a renamed parameter cannot look like a stable one.
 """
 from __future__ import annotations
@@ -11,17 +11,20 @@ import pandas as pd
 
 from eval import integration
 from eval.results import write_results
-from eval.run_batch import load_sample, notes_for, run_batch
+from eval.run_batch import load_sample, run_batch
 
 PARAMS = {
     "extra_fuel_min": ("synthetic", "extra_fuel_min"),
     "slot_occupancy": ("synthetic", "slot_occupancy"),
-    "gate_occupancy": ("synthetic", "gate_occupancy"),
+    "original_gate_conflict": ("synthetic", "original_gate_conflict_prob"),
+    "shift_end_after_eta": ("synthetic", "shift_end_after_eta_min"),
     "connecting_pax": ("synthetic", "connecting_pax_fraction"),
-    "aar_weather": ("synthetic", "aar_weather"),
-    "cost_per_min": ("costs", "cost_per_min"),
+    "transfer_min": ("synthetic", "transfer_min"),
+    "aar_weather": ("synthetic", "aar_weather_per_hour"),
+    "cost_per_delay_min": ("costs", "cost_per_delay_min"),
     "missed_pax_cost": ("costs", "cost_per_missed_pax"),
-    "overtime_rate": ("costs", "overtime_rate"),
+    "overtime_rate": ("costs", "overtime_rate_per_min"),
+    "gate_size_mismatch": ("costs", "gate_size_mismatch_per_class"),
 }
 FACTORS = (0.7, 1.3)
 
@@ -47,10 +50,10 @@ def run_sensitivity(rows: pd.DataFrame, cfg, seeds=(0,), params: dict = PARAMS) 
                 "decision_stability": 1.0, "unsafe_accepted": int(base["unsafe_accepted"].sum()),
                 "neg_beats_fcfs_rate": beats_fcfs_rate(base), "mean_total_cost": base["neg_total_cost"].mean(),
                 "label": "modelled"}]
-    for name, (section, path) in params.items():
+    for name, (section, key) in params.items():
         for factor in FACTORS:
             try:
-                scaled = cfg.scaled(section, path, factor)
+                scaled = cfg.scaled(section, key, factor)
             except KeyError:
                 records.append({"parameter": name, "factor": factor, "status": "SKIPPED_NOT_IN_CONFIG",
                                 "label": "modelled"})
@@ -71,12 +74,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--n", type=int, default=100)
     parser.add_argument("--seeds", type=int, default=2)
-    parser.add_argument("--allow-stubs", action="store_true")
     args = parser.parse_args()
 
-    stubbed = integration.use_pipeline(args.allow_stubs)
     table = run_sensitivity(load_sample(args.n), integration.load_cfg(), range(args.seeds))
-    write_results(table, "e6_sensitivity", notes_for(stubbed))
+    write_results(table, "e6_sensitivity", ("Each parameter scaled by 0.7 and 1.3. Label: modelled.",))
     print(table.to_string(index=False))
 
 

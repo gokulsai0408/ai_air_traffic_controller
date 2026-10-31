@@ -1,0 +1,25 @@
+# Each parameter scaled by 0.7 and 1.3. Label: modelled.
+parameter,factor,status,scenarios,decision_stability,unsafe_accepted,neg_beats_fcfs_rate,mean_total_cost,label
+BASELINE,1.0,OK,100,1.0,0,1.0,6301.259685050846,modelled
+extra_fuel_min,0.7,OK,100,0.91,0,1.0,7449.377757957753,modelled
+extra_fuel_min,1.3,OK,100,0.99,0,1.0,6019.719446955608,modelled
+slot_occupancy,0.7,OK,100,0.66,0,1.0,5472.828337235288,modelled
+slot_occupancy,1.3,OK,100,0.34,0,1.0,14452.269503098505,modelled
+original_gate_conflict,0.7,OK,100,0.86,0,1.0,6410.7208304575315,modelled
+original_gate_conflict,1.3,OK,100,0.81,0,1.0,6350.471621289183,modelled
+shift_end_after_eta,0.7,OK,100,0.96,0,1.0,6325.800963735533,modelled
+shift_end_after_eta,1.3,OK,100,1.0,0,1.0,6297.3896573979655,modelled
+connecting_pax,0.7,OK,100,1.0,0,1.0,4991.590062461557,modelled
+connecting_pax,1.3,OK,100,1.0,0,1.0,7865.947185050846,modelled
+transfer_min,0.7,OK,100,1.0,0,1.0,5892.40551838418,modelled
+transfer_min,1.3,OK,100,0.99,0,1.0,6731.7317078533815,modelled
+aar_weather,0.7,OK,100,0.08,0,1.0,8029.478783705327,modelled
+aar_weather,1.3,OK,100,0.05,0,1.0,7203.743262840704,modelled
+cost_per_delay_min,0.7,OK,100,1.0,0,1.0,6199.794310050846,modelled
+cost_per_delay_min,1.3,OK,100,1.0,0,1.0,6402.725060050848,modelled
+missed_pax_cost,0.7,OK,100,1.0,0,1.0,4956.728435050847,modelled
+missed_pax_cost,1.3,OK,100,1.0,0,1.0,7645.790935050846,modelled
+overtime_rate,0.7,OK,100,1.0,0,1.0,6273.772573471902,modelled
+overtime_rate,1.3,OK,100,1.0,0,1.0,6328.746796629793,modelled
+gate_size_mismatch,0.7,OK,100,0.97,0,1.0,6278.821532110473,modelled
+gate_size_mismatch,1.3,OK,100,0.99,0,1.0,6321.811684314857,modelled

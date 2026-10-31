@@ -1,0 +1,8 @@
+# Flight rows are REAL. Gates, slots, fuel, crew, ground shift and connections are SYNTHETIC (seeded generator), so any rate that depends on them is labelled modelled.
+constraint_id,do_nothing_runs_failing,share_of_unsafe_do_nothing,label
+C-GATE-02,604,0.8273972602739726,modelled (SYNTHETIC context)
+C-WAKE-01,189,0.2589041095890411,modelled (SYNTHETIC context)
+C-POL-OT-01,108,0.14794520547945206,modelled (SYNTHETIC context)
+C-TAXI-01,95,0.13013698630136986,modelled (SYNTHETIC context)
+C-FUEL-01,77,0.10547945205479452,modelled (SYNTHETIC context)
+C-CREW-01,1,0.0013698630136986301,modelled (SYNTHETIC context)

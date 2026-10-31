@@ -1,3 +1,7 @@
-# Round cap for the negotiation (BUILD_PLAN 5.6). 3 = at most 3 rounds; 2 = a strict "under 3".
-# The evaluation reads this, so changing it here updates the batch runs, E3 table and rounds chart.
-max_rounds: 3
+# Round cap for the negotiation (BUILD_PLAN 5.6). Owner: Person D.
+# The Airbus brief asks for agreement "in under 3 turns", so the cap is 2:
+#   round 1 = propose + vote (consensus if all three accept)
+#   round 2 = binding compromise, else fallback, else escalation to the duty manager
+# eval/integration.py passes this to negotiate() as {"max_rounds": ..., "hash": world.config_hash},
+# and the coordinator writes it into the ledger's SCENARIO entry, where verify reads it.
+max_rounds: 2

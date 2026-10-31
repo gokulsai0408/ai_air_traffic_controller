@@ -1,7 +1,9 @@
 """Run scenarios and collect one wide row per scenario (E3 and E4 read this).
 
 Column prefixes: neg_ negotiated, dn_ do-nothing, fb_ fallback, cs_ central solver,
-sp_ single-prompt baseline. All USD figures rest on ASSUMED cost constants.
+sp_ single-prompt baseline. Every plan is scored on the world the kernel actually used
+(ops facts applied) and the central solver searches the same option pool the negotiation saw,
+both rebuilt from the saved ledger. All USD figures rest on the constants in config/costs.yaml.
 """
 from __future__ import annotations
 
@@ -17,15 +19,20 @@ from typing import Optional, Sequence
 import pandas as pd
 
 from eval import integration
-from eval.results import STUB_NOTE, write_results
+from eval.results import write_results
 from eval.sample import sample_rows
 
+ROLES = integration.ROLES
+PLAN_PREFIXES = ("neg", "dn", "fb", "cs")
+DECIDED = ("CONSENSUS", "COMPROMISE", "FALLBACK")
+COST_TOLERANCE_USD = 1e-6   # float-comparison tolerance only
 AGENT_OPTION_ID = re.compile(r"^[PGA]-\d+-\d+$")  # seed options are G-017, ground drafts G-2-03
 REQUIRED_COLUMNS = [
-    "outcome", "rounds_used", "unsafe_accepted", "price_of_privacy_usd", "central_bound_ok",
-    *(f"{p}_{m}" for p in ("neg", "dn", "fb", "cs") for m in (
-        "has_plan", "safe", "policy_ok", "failed_constraints", "total_cost", "action",
-        "hold_min", "gate_delay_min", "missed_pax", "overtime_min", "hold_fuel_kg")),
+    "outcome", "rounds_used", "logged_max_rounds", "unsafe_accepted", "price_of_privacy_usd", "central_bound_ok",
+    "compliant_options", "conflict", "escalation_no_compliant", "neg_beats_fallback", "neg_saving_vs_fallback_usd",
+    *(f"{p}_{m}" for p in PLAN_PREFIXES for m in (
+        "has_plan", "safe", "policy_ok", "failed_constraints", "total_cost", *(f"cost_{r}" for r in ROLES),
+        "action", "hold_min", "gate_delay_min", "missed_pax", "overtime_min", "hold_fuel_kg")),
 ]
 
 
@@ -42,7 +49,7 @@ def gate_delay_min(on_block: Optional[str], row: pd.Series) -> float:
 
 
 def plan_metrics(prefix: str, option, world, row: pd.Series) -> dict:
-    from cdm import costs as cost_module
+    from cdm.costs import hold_fuel_kg
     from cdm.kernel import check
     from cdm.solver import costs_of
     from cdm.world import derive
@@ -50,26 +57,31 @@ def plan_metrics(prefix: str, option, world, row: pd.Series) -> dict:
     if option is None:
         return {f"{prefix}_has_plan": False}
     report = check(option, world)
-    derived = derive(option, world)
-    option_costs = costs_of(option, world)
-    fuel = getattr(cost_module, "hold_fuel_kg", None)  # optional helper from A; NaN until it lands
-    return {
+    record = {
         f"{prefix}_has_plan": True,
         f"{prefix}_safe": bool(report.safe),
         f"{prefix}_policy_ok": bool(report.policy_ok),
         f"{prefix}_failed_constraints": ";".join(r.id for r in report.results if r.status == "FAIL"),
-        f"{prefix}_total_cost": sum(option_costs.values()),
         f"{prefix}_action": getattr(option.action_type, "value", str(option.action_type)),
         f"{prefix}_hold_min": option.hold_minutes,
+    }
+    if not report.safe and any(r.id in ("C-SCHEMA-01", "C-REF-01") and r.status == "FAIL" for r in report.results):
+        return record   # derive() is only defined on options whose IDs resolve
+    derived = derive(option, world)
+    option_costs = costs_of(option, world)
+    record.update({
+        f"{prefix}_total_cost": sum(option_costs.values()),
+        **{f"{prefix}_cost_{role}": option_costs[role] for role in ROLES},
         f"{prefix}_gate_delay_min": gate_delay_min(derived.on_block_time, row),
         f"{prefix}_missed_pax": derived.missed_pax,
         f"{prefix}_overtime_min": derived.ground_overtime_min,
-        f"{prefix}_hold_fuel_kg": fuel(option, derived, world) if fuel else float("nan"),
-    }
+        f"{prefix}_hold_fuel_kg": hold_fuel_kg(option, derived, world),
+    })
+    return record
 
 
 def summarise_ledger(path: Path) -> dict:
-    """Count what a saved ledger shows. KERNEL payloads are {"round": n, "reports": [report dict]}."""
+    """Count what a saved ledger shows. KERNEL payloads are {"round": n, "reports": [report dict], ...}."""
     latest: dict[str, dict] = {}
     types: Counter = Counter()
     unparsed = 0
@@ -102,68 +114,132 @@ def summarise_ledger(path: Path) -> dict:
     }
 
 
-def run_scenario(row: pd.Series, seed: int, agent_kind: str, cfg, ledger_dir: Path,
-                 single_prompt: bool = False) -> dict:
+def logged_max_rounds(entries: list[dict]) -> Optional[int]:
+    """The round cap the coordinator actually used, as written in the SCENARIO entry."""
+    scenario = next((e for e in entries if e["type"] == "SCENARIO"), None)
+    value = scenario["payload"].get("max_rounds") if scenario else None
+    return int(value) if value is not None else None
+
+
+def kernel_world(world, entries: list[dict]):
+    """The world the kernel checked against: the agents' ops facts applied (tighten-only)."""
+    from cdm.kernel import apply_facts
+    from cdm.schemas import OpsFacts
+
+    for entry in entries:
+        if entry["type"] == "KERNEL" and isinstance(entry["payload"], dict) and entry["payload"].get("facts"):
+            return apply_facts(world, OpsFacts.model_validate(entry["payload"]["facts"]))
+    return world
+
+
+def logged_pool(entries: list[dict]) -> list:
+    """Every option the negotiation put through the kernel: seeds, do-nothing, fallback and agent drafts."""
+    from cdm.schemas import Option
+
+    pool: dict[str, Option] = {}
+    for entry in entries:
+        if entry["type"] == "KERNEL" and isinstance(entry["payload"], dict):
+            for raw in entry["payload"].get("options") or []:
+                option = Option.model_validate(raw)
+                pool.setdefault(option.option_id, option)
+    return list(pool.values())
+
+
+def pool_metrics(pool: list, world) -> dict:
+    """Is there a conflict of interest at all? A conflict = no single compliant option is cheapest for all three."""
+    from cdm.kernel import check
+    from cdm.solver import costs_of
+
+    compliant = []
+    for option in pool:
+        report = check(option, world)
+        if report.safe and report.policy_ok:
+            compliant.append(costs_of(option, world))
+    if not compliant:
+        return {"compliant_options": 0, "conflict": float("nan")}
+    best = {r: min(c[r] for c in compliant) for r in ROLES}
+    everyone_best = any(all(c[r] <= best[r] + COST_TOLERANCE_USD for r in ROLES) for c in compliant)
+    return {"compliant_options": len(compliant), "conflict": not everyone_best}
+
+
+def run_scenario(row: pd.Series, seed: int, agent_kind: str, cfg: integration.RunCfg, ledger_dir: Path,
+                 single_prompt: bool = False, what_if: Optional[dict] = None,
+                 ledger_name: Optional[str] = None) -> dict:
+    """`what_if` = dashboard overrides already applied to `cfg`; they are logged before the negotiation."""
     from cdm.baseline_single_prompt import SinglePromptFailure, single_prompt_plan
     from cdm.coordinator import negotiate
     from cdm.fallback import fallback_plan
     from cdm.kernel import check
-    from cdm.options import do_nothing, seed_options
+    from cdm.ledger import read_entries
+    from cdm.options import do_nothing
     from cdm.solver import central_solve, costs_of
     from cdm.world import build_world
 
     key = integration.flight_key(row)
     record = {
         "flight_key": key, "seed": seed, "agent_kind": agent_kind, "max_rounds": cfg.max_rounds,
-        "airport": row["DESTINATION_AIRPORT"], "stratum": row.get("stratum", ""),
+        "config_hash": cfg.hash, "airport": row["DESTINATION_AIRPORT"], "stratum": row.get("stratum", ""),
         "tail": row["TAIL_NUMBER"], "month": int(row["MONTH"]), "day": int(row["DAY"]),
         "flight": int(row["FLIGHT_NUMBER"]), "recorded_arrival_delay": float(row["ARRIVAL_DELAY"]),
     }
-    world = build_world(row, seed, cfg)
+    world = build_world(row, seed, cfg.config)
+    record["stress"] = world.stress or ""
     ledger = integration.make_ledger(key, seed, cfg)
+    if what_if:
+        from eval.whatif import WHAT_IF_ENTRY, ledger_payload
+        ledger.append(WHAT_IF_ENTRY, "duty_manager", ledger_payload(what_if))
     started = time.perf_counter()
-    decision = negotiate(world, integration.make_agents(agent_kind, seed), cfg, ledger)
+    decision = negotiate(world, integration.make_agents(agent_kind, seed), cfg.negotiation(world), ledger)
     record["latency_s"] = time.perf_counter() - started
 
     safe_name = "".join(c if c.isalnum() else "_" for c in key)
-    ledger_path = ledger_dir / f"{safe_name}_s{seed}.jsonl"
+    ledger_path = Path(ledger_dir) / (ledger_name or f"{safe_name}_s{seed}.jsonl")
     ledger.save(ledger_path)
+    entries = read_entries(ledger_path)
+    record["ledger"] = str(ledger_path)
+    record["logged_max_rounds"] = logged_max_rounds(entries)
     record.update(summarise_ledger(ledger_path))
 
     record.update(outcome=decision.outcome, rounds_used=decision.rounds_used,
                   escalation_kind=decision.escalation.kind if decision.escalation else "")
-    record.update(plan_metrics("neg", decision.option, world, row))
+    checked = kernel_world(world, entries)
+    record.update(plan_metrics("neg", decision.option, checked, row))
     # The headline safety metric: re-check the decision here rather than trusting the coordinator.
-    record["unsafe_accepted"] = bool(decision.option is not None and not check(decision.option, world).safe)
+    record["unsafe_accepted"] = bool(decision.option is not None and not check(decision.option, checked).safe)
 
-    record.update(plan_metrics("dn", do_nothing(world), world, row))
-    record.update(plan_metrics("fb", fallback_plan(world), world, row))
+    record.update(plan_metrics("dn", do_nothing(checked), checked, row))
+    record.update(plan_metrics("fb", fallback_plan(checked), checked, row))
 
-    pool = list(seed_options(world))
-    if decision.option is not None and all(o.option_id != decision.option.option_id for o in pool):
-        pool.append(decision.option)
-    central, central_costs = central_solve(world, pool)
-    record.update(plan_metrics("cs", central, world, row))
-    if central is not None and decision.option is not None and record["neg_policy_ok"] and record["neg_safe"]:
+    pool = logged_pool(entries)
+    record.update(pool_metrics(pool, checked))
+    record["escalation_no_compliant"] = (decision.outcome == "ESCALATED" and record["compliant_options"] == 0)
+
+    central, central_costs = central_solve(checked, pool)
+    record.update(plan_metrics("cs", central, checked, row))
+    decided = decision.outcome in DECIDED and record.get("neg_safe") and record.get("neg_policy_ok")
+    if decided and central is not None:
         gap = record["neg_total_cost"] - sum(central_costs.values())
         record["price_of_privacy_usd"] = gap
-        record["central_bound_ok"] = gap >= -1e-6
+        record["central_bound_ok"] = gap >= -COST_TOLERANCE_USD
         # Agents report costs themselves, so a mismatch here flags a broken assessor.
-        reported = decision.costs_by_agent
-        expected = costs_of(decision.option, world)
+        expected = costs_of(decision.option, checked)
         record["costs_match_cost_functions"] = all(
-            abs(reported.get(r, float("nan")) - expected[r]) < 1e-6 for r in expected)
+            abs(decision.costs_by_agent.get(r, float("nan")) - expected[r]) < COST_TOLERANCE_USD for r in expected)
+    if decided and record.get("fb_safe") and record.get("fb_policy_ok"):
+        saving = record["fb_total_cost"] - record["neg_total_cost"]
+        record["neg_saving_vs_fallback_usd"] = saving
+        record["neg_beats_fallback"] = saving > COST_TOLERANCE_USD
 
     if single_prompt:
         try:
-            record.update(plan_metrics("sp", single_prompt_plan(world), world, row))
+            record.update(plan_metrics("sp", single_prompt_plan(world), checked, row))
             record["sp_error"] = ""
         except SinglePromptFailure as exc:
             record.update(sp_has_plan=False, sp_error=str(exc)[:200])
     return record
 
 
-def run_batch(rows: pd.DataFrame, agent_kind: str, cfg, seeds: Sequence[int] = (0,),
+def run_batch(rows: pd.DataFrame, agent_kind: str, cfg: integration.RunCfg, seeds: Sequence[int] = (0,),
               ledger_dir: Optional[Path] = None, single_prompt: bool = False) -> pd.DataFrame:
     """One row per scenario. A scenario that crashes is recorded in `error`, never dropped."""
     records = []
@@ -185,14 +261,18 @@ def run_batch(rows: pd.DataFrame, agent_kind: str, cfg, seeds: Sequence[int] = (
     return batch
 
 
+def repo_relative(path) -> str:
+    """Ledger paths in committed CSVs stay machine-independent."""
+    if not isinstance(path, str) or not path:
+        return path
+    try:
+        return Path(path).resolve().relative_to(integration.ROOT).as_posix()
+    except ValueError:
+        return path
+
+
 def load_sample(n: int, sample_seed: int = 2015) -> pd.DataFrame:
-    dtype = {"SCHEDULED_DEPARTURE": str, "SCHEDULED_ARRIVAL": str}
-    flights = pd.read_csv(integration.ROOT / "data" / "flights.csv", dtype=dtype)
-    return sample_rows(flights, n, sample_seed)
-
-
-def notes_for(stubbed: bool, *notes: str) -> tuple[str, ...]:
-    return ((STUB_NOTE,) if stubbed else ()) + notes
+    return sample_rows(integration.load_flights(), n, sample_seed)
 
 
 def main() -> None:
@@ -201,15 +281,17 @@ def main() -> None:
     parser.add_argument("--n", type=int, default=100)
     parser.add_argument("--seeds", type=int, default=10)
     parser.add_argument("--single-prompt", action="store_true", help="also run the banned-design baseline")
-    parser.add_argument("--allow-stubs", action="store_true")
     parser.add_argument("--out", default=None)
     args = parser.parse_args()
 
-    stubbed = integration.use_pipeline(args.allow_stubs)
-    batch = run_batch(load_sample(args.n), args.agents, integration.load_cfg(), range(args.seeds),
+    cfg = integration.load_cfg()
+    batch = run_batch(load_sample(args.n), args.agents, cfg, range(args.seeds),
                       integration.ROOT / "runs" / f"batch_{args.agents}", args.single_prompt)
-    path = write_results(batch, args.out or f"batch_{args.agents}", notes_for(
-        stubbed, f"Sample: {args.n} rows x {args.seeds} seeds. Costs use ASSUMED constants."))
+    batch["ledger"] = batch["ledger"].map(repo_relative)
+    path = write_results(batch, args.out or f"batch_{args.agents}", (
+        f"Sample: {args.n} rows x {args.seeds} seeds, max_rounds {cfg.max_rounds}, config {cfg.hash}.",
+        "Flight rows are REAL; gates, slots, fuel, crew, shift and connections are SYNTHETIC. "
+        "Costs use config/costs.yaml constants (mostly ASSUMED)."))
     errors = int((batch["error"] != "").sum())
     print(f"{len(batch)} scenarios, {errors} errors -> {path}")
 

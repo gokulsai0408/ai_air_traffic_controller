@@ -1,0 +1,18 @@
+# Flight rows are REAL. Gates, slots, fuel, crew, ground shift and connections are SYNTHETIC (seeded generator), so any rate that depends on them is labelled modelled.
+# Costs are modelled with config/costs.yaml constants: delay and fuel prices are sourced, the rest ASSUMED.
+metric,value,unit,n,label,definition
+scenarios,1000.0,runs,1000,measured,scenarios that ran without crashing
+unsafe_accepted,0.0,runs,1000,measured,decisions that fail a SAFETY or PHYSICAL constraint when the kernel re-checks them
+decided_rate,0.789,share,1000,measured,"CONSENSUS, COMPROMISE or FALLBACK with a safe, policy-compliant plan"
+escalation_rate,0.211,share,1000,measured,runs handed to the duty manager
+escalation_no_compliant_option_rate,0.990521327014218,share,211,measured,escalations where no safe + policy-compliant option existed in the pool (necessary escalations)
+do_nothing_unsafe_rate,0.73,share,1000,modelled (SYNTHETIC context),"the status-quo FCFS plan (original gate, first free slot) fails a SAFETY or PHYSICAL constraint"
+neg_beats_fallback_rate,0.24714828897338403,share,789,modelled,decided runs (fallback also legal) where the negotiated plan is strictly cheaper in total
+neg_equals_fallback_rate,0.752851711026616,share,789,modelled,decided runs where negotiation lands on a plan costing the same as the fallback
+mean_saving_vs_fallback_usd,171.02750079383964,USD,789,modelled,mean (fallback total - negotiated total) over decided runs
+saving_vs_fallback_pct,2.3252231064160296,%,789,modelled,summed saving / summed fallback cost
+price_of_privacy_pct,0.8810069264237371,%,789,modelled,"summed (negotiated - central optimum) / summed central optimum, same option pool"
+price_of_privacy_mean_usd,62.74132148388085,USD,789,modelled,mean (negotiated - central optimum)
+central_strictly_better_rate,0.045627376425855515,share,789,modelled,decided runs where the full-information solver finds a cheaper compliant plan
+central_bound_violations,0.0,runs,789,measured,"runs where negotiation beat the central optimum on its own pool (must be 0, else a bug)"
+conflict_rate,0.36030341340075855,share,791,modelled,runs where no single compliant option is cheapest for all three agents (a real negotiation exists)

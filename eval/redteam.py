@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from eval import integration
 from eval.results import write_results
-from eval.run_batch import load_sample, notes_for
+from eval.run_batch import load_sample
 
 KNOWN_LIMITATIONS = [{
     "attack": "agent misreports its own cost to steer the result",
@@ -75,7 +75,7 @@ def run_redteam(rows: pd.DataFrame, cfg, seeds=(0,)) -> pd.DataFrame:
     tally: dict[str, dict] = {}
     for _, row in rows.iterrows():
         for seed in seeds:
-            world = build_world(row, seed, cfg)
+            world = build_world(row, seed, cfg.config)
             for attack in builtin_attacks(world) + integration.attacks_for(world):
                 caught, safe, detail = attack_caught(attack, world)
                 item = tally.setdefault(attack["name"], {
@@ -94,12 +94,10 @@ def run_redteam(rows: pd.DataFrame, cfg, seeds=(0,)) -> pd.DataFrame:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--n", type=int, default=20)
-    parser.add_argument("--allow-stubs", action="store_true")
     args = parser.parse_args()
 
-    stubbed = integration.use_pipeline(args.allow_stubs)
     table = run_redteam(load_sample(args.n), integration.load_cfg())
-    write_results(table, "e2_redteam", notes_for(stubbed))
+    write_results(table, "e2_redteam")
     print(table[["attack", "expected", "worlds", "caught", "unsafe_accepted", "result"]].to_string(index=False))
 
 

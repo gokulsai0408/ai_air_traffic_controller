@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from cdm import cascade
-from eval.results import RESULTS_DIR, read_notes, read_results, write_results
+from eval.results import RESULTS_DIR, read_results, write_results
 
 
 def run_validation(out_dir: Path | str = RESULTS_DIR) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
@@ -56,8 +56,7 @@ def main() -> None:
     if args.batch:
         fitted = validation.loc[validation["target"] == "next_departure_delay", "fitted_min_turn"].iloc[0]
         table = counterfactual(read_results(args.batch), pairs, int(fitted))
-        inherited = tuple(n for n in read_notes(args.batch) if n.startswith("STUB"))
-        write_results(table, "e5_counterfactual", inherited + (cascade.LIMITATION,
+        write_results(table, "e5_counterfactual", (cascade.LIMITATION,
                       "The after figure is modelled, never measured."))
         print(table[["next_delay_recorded", "next_delay_modelled_before", "next_delay_modelled_after"]].mean().round(1))
 
