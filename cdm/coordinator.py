@@ -23,6 +23,7 @@ DEFAULT_MAX_DRAFTS_PER_AGENT = 2
 COST_TOLERANCE_USD = 1e-6   # float-comparison tolerance only
 ID_PREFIX = {"pilot": "P", "ground": "G", "atc": "A"}   # e.g. "P-2-03" = pilot, round 2, draft 3
 HARD_CLASSES = (CClass.SAFETY, CClass.PHYSICAL)
+AGENT_EVENT_TYPES = frozenset({"LLM_CALL", "AGENT_FALLBACK"})
 
 
 class UnsafeDecisionError(RuntimeError):
@@ -211,6 +212,15 @@ class _Negotiation:
         except Exception as e:   # an agent failure must never stop the protocol
             self.log("AGENT_ERROR", "coordinator", {"agent": role, "call": what, "error": repr(e)[:500]})
             return None
+        finally:
+            self.drain_agent_events(role)
+
+    def drain_agent_events(self, role: str) -> None:
+        """LLM agents record every prompt/response; only whitelisted entry types reach the ledger."""
+        pop = getattr(self.agents[role], "pop_ledger_events", None)
+        for type_, payload in (pop() if callable(pop) else []):
+            if type_ in AGENT_EVENT_TYPES:
+                self.log(type_, role, payload)
 
     # ---- protocol ------------------------------------------------------------------------------
     def run(self) -> Decision:
