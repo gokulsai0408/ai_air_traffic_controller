@@ -112,10 +112,14 @@ def test_verify_consensus_reproduced(tmp_path):
     assert report.message == report.summary()
 
 
-def test_verify_does_not_import_any_llm_module(tmp_path):
+def test_verify_does_not_import_any_llm_module(tmp_path, monkeypatch):
     import sys
+    is_llm = lambda name: name.startswith("cdm.agents.llm")   # cdm.agents.llm and cdm.agents.llm_client
+    # Other test modules import the LLM agents during collection; hide them so this checks verify alone.
+    for name in [m for m in sys.modules if is_llm(m)]:
+        monkeypatch.delitem(sys.modules, name)
     report = verify(run_log(tmp_path / "r.jsonl"), loader())
-    assert report.complete and "cdm.agents.llm" not in sys.modules
+    assert report.complete and not any(is_llm(m) for m in sys.modules)
 
 
 def test_verify_compromise_reproduced(tmp_path):
