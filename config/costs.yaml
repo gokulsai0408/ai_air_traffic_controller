@@ -13,6 +13,9 @@ turn_penalty_per_min:  { value: 40,   tag: ASSUMED_CONST, source: "Team estimate
 holding_workload_per_min: { value: 25, tag: ASSUMED_CONST, source: "Team estimate" }
 stack_congestion_per_aircraft: { value: 5, tag: ASSUMED_CONST, source: "Team estimate; per aircraft landing in the 10 min before our slot" }
 runway_minute_value:   { value: 60,   tag: ASSUMED_CONST, source: "Team estimate" }
+gate_size_mismatch_per_class: { value: 400, tag: ASSUMED_CONST, source: "Team estimate; per size class the gate is bigger than the aircraft needs, because it blocks capacity for larger aircraft. Not charged on REMOTE-1" }
+tight_fit_comfort_min: { value: 30, tag: ASSUMED_CONST, source: "Team estimate; gap wanted between our turnaround end plus buffer and the gate's next occupancy" }
+tight_fit_per_min:     { value: 20, tag: ASSUMED_CONST, source: "Team estimate; knock-on risk per minute the gap falls short of tight_fit_comfort_min" }
 divert_coordination_cost: { value: 800, tag: ASSUMED_CONST, source: "Team estimate" }
 holding_flow_kg_per_min: { regional: 25, narrowbody: 40, widebody: 90, tag: ASSUMED_CONST, source: "Plan section 5.4" }
 min_turn_min:            { regional: 25, narrowbody: 35, widebody: 60, tag: ASSUMED_CONST, source: "Plan section 5.4" }

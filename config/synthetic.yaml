@@ -19,6 +19,12 @@ seats: { regional: 70, narrowbody: 160, widebody: 280 }
 connecting_pax_fraction: [0.25, 0.45]
 connection_banks: [4, 8]
 connection_dep_after_eta_min: [20, 150]
+concourses: [2, 3]               # contact gates are spread over this many neighbouring concourses
+transfer_min:                    # gate to connecting flight, on top of the 45-min minimum connection time
+  same: [3, 7]
+  adjacent: [8, 12]
+  far: [13, 17]                  # two concourses apart
+  remote_bus: [12, 18]           # REMOTE-1: bus to the terminal, then the same-concourse walk
 default_taxi_in_min: 8           # only when TAXI_IN is missing
 widebody_distance_threshold: 2000
 alternates: { count: [2, 3], min_distance_nm: 50, speed_kt: 300, approach_min: 10 }

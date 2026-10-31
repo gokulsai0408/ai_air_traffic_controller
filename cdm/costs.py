@@ -6,7 +6,7 @@ every option, and including it would hide the differences the agents negotiate o
 from __future__ import annotations
 
 from .schemas import Derived, Option
-from .world import REMOTE_GATE, World, timeline
+from .world import REMOTE_GATE, SIZE_RANK, Gate, World, timeline
 
 
 def hold_fuel_kg(option: Option, derived: Derived, world: World) -> float:
@@ -41,7 +41,21 @@ def cost_ground(option: Option, derived: Derived, world: World) -> float:
         cost += world.cost("gate_change_fixed")
     if option.gate_id == REMOTE_GATE:
         cost += world.cost("remote_stand_cost")
+    elif line.gate is not None and not line.diverted:
+        cost += _gate_utilisation(line.gate, line.on_block_min + min_turn, world)
     return float(cost)
+
+
+def _gate_utilisation(gate: Gate, turn_end: float, world: World) -> float:
+    """A too-big gate wastes capacity; a tight next arrival risks knock-on delay."""
+    oversize = max(0, SIZE_RANK[gate.size_class] - SIZE_RANK[world.public.aircraft_category])
+    next_starts = [start for start, end in gate.occupancy if end > turn_end]
+    shortfall = 0.0
+    if next_starts:
+        comfort = world.cost("tight_fit_comfort_min")
+        gap = min(next_starts) - (turn_end + world.params.gate_buffer_min)
+        shortfall = min(comfort, max(0.0, comfort - gap))
+    return oversize * world.cost("gate_size_mismatch_per_class") + shortfall * world.cost("tight_fit_per_min")
 
 
 def cost_atc(option: Option, derived: Derived, world: World) -> float:
