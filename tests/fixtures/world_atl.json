@@ -1,7 +1,7 @@
 {
   "flight_key": "20150612-DL1234-ORD-ATL-1630",
   "seed": 0,
-  "config_hash": "216453595b5658be",
+  "config_hash": "e4b3f0be5d329a97",
   "base_date": "2015-06-12",
   "params": {
     "gate_buffer_min": 10.0,

@@ -231,6 +231,41 @@ def test_costs_never_negative():
                 assert fn(option, derived, world) >= 0
 
 
+def test_every_cost_has_tag_and_source():
+    for name, entry in CFG.costs.items():
+        assert entry["tag"] in ("REAL", "ASSUMED_CONST"), name
+        assert entry["source"].strip(), name
+
+
+def test_real_costs_cite_a_link():
+    assert all("https://" in e["source"] for e in CFG.costs.values() if e["tag"] == "REAL")
+
+
+def test_ops_ground_truth_matches_notes():
+    seen = {"twy": 0, "gate": 0, "turb": 0, "rwy": 0}
+    for world in worlds(200):
+        notes, truth = world.public.ops_notes, world.ops_ground_truth
+        for taxiway in truth.taxiway_closures:
+            seen["twy"] += 1
+            assert f"TWY {taxiway} closed" in notes
+        for gate in truth.gates_unavailable:
+            seen["gate"] += 1
+            assert f"GATE {gate} out of service" in notes
+        assert truth.turbulence_in_hold == ("TURB" in notes)
+        assert bool(truth.runway_config_change) == ("RWY CONFIG" in notes)
+        seen["turb"] += truth.turbulence_in_hold
+        seen["rwy"] += bool(truth.runway_config_change)
+        assert notes.count("TWY") == len(truth.taxiway_closures) and notes.count("GATE") == len(truth.gates_unavailable)
+    assert all(seen.values()), seen
+
+
+def test_ops_ground_truth_hidden_from_agent_views():
+    fields = set()
+    for view in ("public", "pilot", "ground", "atc"):
+        fields |= set(type(getattr(build_world(ATL, 1, CFG), view)).model_fields)
+    assert "ops_ground_truth" not in fields and "stress" not in fields
+
+
 def test_world_round_trips_through_json():
     world = build_world(ATL, 1, CFG)
     assert World.model_validate_json(world.model_dump_json()).model_dump() == world.model_dump()

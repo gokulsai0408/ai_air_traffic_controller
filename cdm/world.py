@@ -218,8 +218,8 @@ def _build_ops(rng, eta, gates, base_date, closed_alternates, syn) -> tuple[str,
         notes.append("MOD TURB reported in holding at FL120.")
         facts.turbulence_in_hold = True
     if rng.random() < probs["runway_config_change_prob"]:
-        facts.runway_config_change = "Arrivals moving to parallel runway"
-        notes.append("Arrivals moving to parallel runway.")
+        facts.runway_config_change = "RWY CONFIG change, arrivals moving to parallel runway"
+        notes.append(f"{facts.runway_config_change}.")
     if closed_alternates:
         notes.append(f"Regional WX: {', '.join(closed_alternates)} below minima, not available as alternates.")
     return " ".join(notes) or "No significant ops notes.", facts, closures
