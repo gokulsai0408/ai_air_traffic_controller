@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AirSync: disruption negotiation for airline operations</title>
+<meta name="description" content="AirSync: three AI agents (ATC, pilot and ground ops) negotiate a fix for a disrupted arrival; deterministic code checks every plan for safety; the duty manager makes the final call.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #222626; --muted: #5d6461; --bg: #f9f8f4; --card: #ffffff; --panel: #edeee9; --rule: #d7dad4;
+    --slate: #1f272b; --slate-2: #2a3539; --on-dark: #eef1ee; --on-dark-muted: #a9b4b0;
+    --teal: #239db7; --orange: #da894c; --green: #5f8f67; --purple: #8474af; --coral: #c75b52;
+    --radius: 18px; --shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(31,39,43,.07);
+    --serif: "Fraunces", Georgia, "Times New Roman", serif;
+    --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--sans); -webkit-font-smoothing: antialiased; }
+  a { color: inherit; }
+  svg { display: block; }
+  .wrap { width: min(1160px, 100% - 32px); margin-inline: auto; }
+  section { padding: 96px 0; }
+  .eyebrow { font: 600 13px/1.2 var(--sans); letter-spacing: .14em; text-transform: uppercase; color: var(--teal); margin: 0 0 14px; }
+  h1, h2, h3 { font-family: var(--serif); font-weight: 700; line-height: 1.1; margin: 0; letter-spacing: -.01em; }
+  h2 { font-size: clamp(30px, 4vw, 44px); max-width: 22ch; }
+  h3 { font-size: 21px; line-height: 1.25; }
+  .lede { font-size: 18px; color: var(--muted); max-width: 62ch; margin: 16px 0 0; }
+  .label { display: inline-block; font: 600 11px/1 var(--sans); letter-spacing: .08em; text-transform: uppercase; padding: 5px 8px; border-radius: 999px; }
+  .label.measured { background: #e3f1e6; color: #2f6b3a; }
+  .label.modelled { background: #fbeee2; color: #9a5520; }
+  .label.assumed { background: #ececec; color: #555; }
+  .label.real { background: #e3f1e6; color: #2f6b3a; }
+  .label.synthetic { background: #fbeee2; color: #9a5520; }
+
+  /* ---- buttons ---- */
+  .btn { display: inline-flex; align-items: center; gap: 10px; font: 600 16px/1 var(--sans); text-decoration: none; padding: 15px 22px;
+         border-radius: 12px; border: 1.5px solid transparent; transition: transform .15s ease, background .15s ease, box-shadow .15s ease; cursor: pointer; }
+  .btn svg { width: 16px; height: 16px; }
+  .btn-primary { background: var(--coral); color: #fff; box-shadow: 0 6px 18px rgba(199,91,82,.35); }
+  .btn-primary:hover { transform: translateY(-1px); background: #b54e45; }
+  .btn-ghost { color: var(--on-dark); border-color: rgba(238,241,238,.35); }
+  .btn-ghost:hover { background: rgba(255,255,255,.07); }
+  .btn:focus-visible, a:focus-visible { outline: 3px solid var(--teal); outline-offset: 3px; }
+
+  /* ---- nav ---- */
+  .nav { position: sticky; top: 0; z-index: 10; background: rgba(31,39,43,.92); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(255,255,255,.06); }
+  .nav .wrap { display: flex; align-items: center; justify-content: space-between; height: 64px; gap: 16px; }
+  .brand { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font: 700 22px/1 var(--serif); }
+  .brand .mark { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--coral); color: #fff; }
+  .brand .mark svg { width: 16px; height: 16px; }
+  .nav nav { display: flex; gap: 26px; }
+  .nav nav a { color: var(--on-dark-muted); text-decoration: none; font-weight: 500; font-size: 15px; }
+  .nav nav a:hover { color: #fff; }
+  .nav .btn { padding: 10px 16px; font-size: 15px; }
+
+  /* ---- hero ---- */
+  .hero { background: radial-gradient(1200px 600px at 85% 20%, rgba(35,157,183,.18), transparent 60%),
+                      radial-gradient(900px 500px at 10% 90%, rgba(199,91,82,.16), transparent 60%), var(--slate);
+          color: var(--on-dark); padding: 88px 0 72px; overflow: hidden; }
+  .hero .wrap { display: grid; grid-template-columns: 1.1fr .9fr; gap: 56px; align-items: center; }
+  .hero .wrap.stats-wrap { display: block; }
+  .hero h1 { font-size: clamp(40px, 6vw, 68px); color: #fff; }
+  .hero h1 em { font-style: normal; color: #f19a8f; }
+  .hero .lede { color: var(--on-dark-muted); font-size: 19px; }
+  .hero .eyebrow { color: #7fd0e2; }
+  .cta-row { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 32px; }
+  .hero-note { margin-top: 18px; font-size: 13px; color: var(--on-dark-muted); }
+  .hero-note code { color: #fff; background: rgba(255,255,255,.08); padding: 2px 6px; border-radius: 6px; }
+
+  .orbit { position: relative; width: min(440px, 100%); aspect-ratio: 1; margin-inline: auto; }
+  .orbit .ring { position: absolute; inset: 9%; border: 1.5px dashed rgba(238,241,238,.22); border-radius: 50%; }
+  .orbit svg.spokes { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .spokes line { stroke-width: 3.2; stroke-linecap: round; stroke-dasharray: 0.1 7; animation: flow 1.2s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -14.2; } }
+  .node { position: absolute; width: 19%; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; color: #fff;
+          box-shadow: 0 10px 30px rgba(0,0,0,.35); transform: translate(-50%, -50%); }
+  .node svg { width: 42%; height: 42%; }
+  .node small { position: absolute; top: 110%; white-space: nowrap; font: 600 13px/1 var(--sans); color: var(--on-dark); }
+  .core { position: absolute; left: 50%; top: 50%; width: 26%; aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 26%;
+          background: #fff; display: grid; place-items: center; box-shadow: 0 16px 40px rgba(0,0,0,.4); }
+  .core span { width: 72%; aspect-ratio: 1; border-radius: 50%; background: var(--purple); display: grid; place-items: center; color: #fff;
+               animation: pulse 2.8s ease-in-out infinite; }
+  .core svg { width: 46%; height: 46%; }
+  .core small { position: absolute; top: 110%; white-space: nowrap; font: 600 13px/1 var(--sans); color: var(--on-dark); }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(132,116,175,.55); } 50% { box-shadow: 0 0 0 16px rgba(132,116,175,0); } }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 64px; }
+  .stat { background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); border-radius: 16px; padding: 18px 20px; }
+  .stat b { display: block; font: 700 32px/1.1 var(--serif); color: #fff; }
+  .stat span { color: var(--on-dark-muted); font-size: 14px; }
+
+  /* ---- cards & grids ---- */
+  .grid { display: grid; gap: 20px; }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  .g4 { grid-template-columns: repeat(4, 1fr); }
+  .g2 { grid-template-columns: repeat(2, 1fr); }
+  .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 26px; }
+  .badge { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: var(--c, var(--teal)); margin-bottom: 18px; flex: none; }
+  .badge svg { width: 21px; height: 21px; }
+  .feature p, .card p { color: var(--muted); margin: 10px 0 0; }
+  .head { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 44px; flex-wrap: wrap; }
+
+  /* problem */
+  .clock h3 { display: flex; align-items: center; gap: 12px; }
+  .clock h3 .badge { margin: 0; }
+  .clock ul { margin: 16px 0 0; padding-left: 18px; color: var(--muted); }
+  .clock li { margin: 6px 0; }
+  .callout { margin-top: 24px; display: flex; align-items: center; gap: 18px; background: var(--panel); border-radius: var(--radius); padding: 22px 26px; }
+  .callout .badge { margin: 0; }
+  .callout p { margin: 0; font-size: 18px; }
+  .callout b { color: var(--coral); }
+
+  /* flow */
+  .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; counter-reset: step; }
+  .step { position: relative; background: var(--card); border-radius: 16px; box-shadow: var(--shadow); padding: 22px 18px; }
+  .step .n { font: 700 13px/1 var(--sans); color: #fff; background: var(--c); width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; margin-bottom: 14px; }
+  .step h3 { font-size: 18px; }
+  .step p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+  .step:not(:last-child)::after { content: ""; position: absolute; right: -12px; top: 50%; width: 10px; height: 10px; border-top: 2.5px solid var(--teal);
+                                  border-right: 2.5px solid var(--teal); transform: translateY(-50%) rotate(45deg); }
+  .outcomes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; align-items: center; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; padding: 8px 14px; border-radius: 999px; background: var(--card); box-shadow: var(--shadow); }
+  .chip i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+
+  /* split */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .side { border-radius: var(--radius); padding: 30px; }
+  .side.ai { background: #eef7fa; }
+  .side.code { background: var(--slate); color: var(--on-dark); }
+  .side.code p, .side.code li { color: var(--on-dark-muted); }
+  .side h3 { display: flex; align-items: center; gap: 12px; font-size: 24px; }
+  .side h3 .badge { margin: 0; }
+  .side ul { margin: 18px 0 0; padding: 0; list-style: none; }
+  .side li { padding: 10px 0 10px 30px; position: relative; border-top: 1px solid rgba(0,0,0,.07); }
+  .side.code li { border-color: rgba(255,255,255,.08); }
+  .side li svg { position: absolute; left: 0; top: 14px; width: 16px; height: 16px; color: var(--teal); }
+  .side.code li svg { color: #8fc79a; }
+
+  /* simulate */
+  .sim { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .tag { font-size: 14px; padding: 7px 12px; border-radius: 10px; background: var(--panel); }
+  .simlist { margin: 0; padding: 0; list-style: none; }
+  .simlist li { display: flex; gap: 14px; padding: 14px 0; border-top: 1px solid var(--rule); }
+  .simlist li:first-child { border-top: 0; padding-top: 0; }
+  .simlist .badge { width: 38px; height: 38px; margin: 0; }
+  .simlist .badge svg { width: 17px; height: 17px; }
+  .simlist b { display: block; }
+  .simlist span { color: var(--muted); font-size: 15px; }
+
+  /* results */
+  .results { background: var(--slate); color: var(--on-dark); }
+  .results h2 { color: #fff; }
+  .results .lede { color: var(--on-dark-muted); }
+  .results .eyebrow { color: #7fd0e2; }
+  .rcard { background: var(--slate-2); border-radius: var(--radius); padding: 26px; border: 1px solid rgba(255,255,255,.06); }
+  .rcard b { display: block; font: 700 46px/1 var(--serif); color: #fff; margin: 10px 0 8px; }
+  .rcard p { margin: 0 0 12px; color: var(--on-dark-muted); }
+  .bars { margin-top: 26px; display: grid; gap: 16px; }
+  .bar { display: grid; grid-template-columns: 210px 1fr 64px; gap: 14px; align-items: center; font-size: 15px; }
+  .bar .track, .bar .fill { display: block; }
+  .bar .track { height: 14px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+  .bar .fill { height: 100%; border-radius: 999px; background: var(--c); width: var(--w); }
+  .bar .v { text-align: right; font-weight: 700; color: #fff; }
+  .note { font-size: 13px; color: var(--on-dark-muted); margin-top: 26px; }
+
+  /* data */
+  table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  th, td { text-align: left; padding: 15px 18px; border-top: 1px solid var(--rule); vertical-align: top; font-size: 15px; }
+  th { background: var(--panel); font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-top: 0; }
+  td:first-child { font-weight: 600; }
+  .notmodel { display: flex; gap: 18px; align-items: flex-start; margin-bottom: 26px; background: #eef7fa; border-radius: var(--radius); padding: 22px 26px; }
+  .notmodel .badge { margin: 0; }
+  .notmodel p { margin: 4px 0 0; color: var(--muted); }
+
+  /* limits */
+  .limits li { margin: 10px 0; color: var(--muted); }
+  .limits li b { color: var(--ink); }
+
+  /* final cta */
+  .final { background: linear-gradient(135deg, #24333a, #1f272b); color: #fff; border-radius: 26px; padding: 56px; display: grid; grid-template-columns: 1.3fr 1fr; gap: 32px; align-items: center; }
+  .final h2 { color: #fff; }
+  .final p { color: var(--on-dark-muted); }
+  .run { background: rgba(0,0,0,.3); border-radius: 14px; padding: 18px 20px; font: 14px/1.7 ui-monospace, SFMono-Regular, Consolas, monospace; color: #dfe7e3; overflow-x: auto; }
+  .run .c { color: #7f8b87; }
+  footer { padding: 40px 0 56px; color: var(--muted); font-size: 14px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-top: 1px solid var(--rule); padding-top: 28px; }
+
+  /* ---- responsive ---- */
+  @media (max-width: 980px) {
+    .hero .wrap, .split, .sim, .final { grid-template-columns: 1fr; }
+    .g4 { grid-template-columns: repeat(2, 1fr); }
+    .flow { grid-template-columns: repeat(2, 1fr); }
+    .step:not(:last-child)::after { display: none; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .nav nav { display: none; }
+  }
+  @media (max-width: 640px) {
+    section { padding: 64px 0; }
+    .g3, .g4, .g2, .flow, .stats { grid-template-columns: 1fr; }
+    .bar { grid-template-columns: 1fr 52px; }
+    .bar .t { grid-column: 1 / -1; }
+    .final { padding: 30px 22px; }
+    .hero { padding-top: 56px; }
+    th:nth-child(3), td:nth-child(3) { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .spokes line, .core span { animation: none; } html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><span class="mark"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M192 93.7C192 59.5 221 0 256 0c36 0 64 59.5 64 93.7l0 66.3L497.8 278.5c8.9 5.9 14.2 15.9 14.2 26.6l0 56.7c0 10.9-10.7 18.6-21.1 15.2L320 320l0 80 57.6 43.2c4 3 6.4 7.8 6.4 12.8l0 42c0 7.8-6.3 14-14 14c-1.3 0-2.6-.2-3.9-.5L256 480 145.9 511.5c-1.3 .4-2.6 .5-3.9 .5c-7.8 0-14-6.3-14-14l0-42c0-5 2.4-9.8 6.4-12.8L192 400l0-80L21.1 377C10.7 380.4 0 372.7 0 361.8l0-56.7c0-10.7 5.3-20.7 14.2-26.6L192 160l0-66.3z"></path></svg></span>AirSync</a>
+    <nav aria-label="Sections">
+      <a href="#problem">Problem</a><a href="#how">How it works</a><a href="#features">Features</a>
+      <a href="#results">Results</a><a href="#data">Data</a>
+    </nav>
+    <a class="btn btn-primary go-product" href="http://localhost:8501">Go to product <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 448 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"></path></svg></a>
+  </div>
+</header>
+
+<main id="top">
+<!-- ===== hero ===== -->
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <p class="eyebrow">Autonomous SG 2026 · Airbus Track · Challenge 02</p>
+      <h1>A safer way to decide when <em>flights unravel</em></h1>
+      <p class="lede">When a storm hits a hub, air traffic control, the airline and the ramp each fight their own clock.
+        AirSync lets three AI agents negotiate a fix in seconds, has deterministic code check every plan for safety,
+        and puts the final call with the airline's duty manager.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary go-product" href="http://localhost:8501">Go to product <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 448 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"></path></svg></a>
+        <a class="btn btn-ghost" href="#how">See how it works</a>
+      </div>
+      <p class="hero-note">The product opens the live dashboard. Start it first with <code>streamlit run app/dashboard.py</code>.</p>
+    </div>
+    <div class="orbit" role="img" aria-label="Three agents, ATC, pilot and ground, all feed one safety kernel">
+      <div class="ring"></div>
+      <svg class="spokes" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <line x1="50" y1="21.5" x2="50" y2="36" stroke="#239db7"/>
+        <line x1="75.8" y1="65.2" x2="63.5" y2="58.2" stroke="#da894c"/>
+        <line x1="24.2" y1="65.2" x2="36.5" y2="58.2" stroke="#5f8f67"/>
+      </svg>
+      <div class="node" style="left:50%;top:11%;background:var(--teal)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 576 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M80.3 44C69.8 69.9 64 98.2 64 128s5.8 58.1 16.3 84c6.6 16.4-1.3 35-17.7 41.7s-35-1.3-41.7-17.7C7.4 202.6 0 166.1 0 128S7.4 53.4 20.9 20C27.6 3.6 46.2-4.3 62.6 2.3S86.9 27.6 80.3 44zM555.1 20C568.6 53.4 576 89.9 576 128s-7.4 74.6-20.9 108c-6.6 16.4-25.3 24.3-41.7 17.7S489.1 228.4 495.7 212c10.5-25.9 16.3-54.2 16.3-84s-5.8-58.1-16.3-84C489.1 27.6 497 9 513.4 2.3s35 1.3 41.7 17.7zM352 128c0 23.7-12.9 44.4-32 55.4L320 480c0 17.7-14.3 32-32 32s-32-14.3-32-32l0-296.6c-19.1-11.1-32-31.7-32-55.4c0-35.3 28.7-64 64-64s64 28.7 64 64zM170.6 76.8C163.8 92.4 160 109.7 160 128s3.8 35.6 10.6 51.2c7.1 16.2-.3 35.1-16.5 42.1s-35.1-.3-42.1-16.5c-10.3-23.6-16-49.6-16-76.8s5.7-53.2 16-76.8c7.1-16.2 25.9-23.6 42.1-16.5s23.6 25.9 16.5 42.1zM464 51.2c10.3 23.6 16 49.6 16 76.8s-5.7 53.2-16 76.8c-7.1 16.2-25.9 23.6-42.1 16.5s-23.6-25.9-16.5-42.1c6.8-15.6 10.6-32.9 10.6-51.2s-3.8-35.6-10.6-51.2c-7.1-16.2 .3-35.1 16.5-42.1s35.1 .3 42.1 16.5z"></path></svg><small style="top:auto;bottom:112%">ATC agent</small></div>
+      <div class="node" style="left:84%;top:70%;background:var(--orange)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M192 93.7C192 59.5 221 0 256 0c36 0 64 59.5 64 93.7l0 66.3L497.8 278.5c8.9 5.9 14.2 15.9 14.2 26.6l0 56.7c0 10.9-10.7 18.6-21.1 15.2L320 320l0 80 57.6 43.2c4 3 6.4 7.8 6.4 12.8l0 42c0 7.8-6.3 14-14 14c-1.3 0-2.6-.2-3.9-.5L256 480 145.9 511.5c-1.3 .4-2.6 .5-3.9 .5c-7.8 0-14-6.3-14-14l0-42c0-5 2.4-9.8 6.4-12.8L192 400l0-80L21.1 377C10.7 380.4 0 372.7 0 361.8l0-56.7c0-10.7 5.3-20.7 14.2-26.6L192 160l0-66.3z"></path></svg><small>Pilot agent</small></div>
+      <div class="node" style="left:16%;top:70%;background:var(--green)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 640 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M640 0l0 400c0 61.9-50.1 112-112 112c-61 0-110.5-48.7-112-109.3L48.4 502.9c-17.1 4.6-34.6-5.4-39.3-22.5s5.4-34.6 22.5-39.3L352 353.8 352 64c0-35.3 28.7-64 64-64L640 0zM576 400a48 48 0 1 0 -96 0 48 48 0 1 0 96 0zM23.1 207.7c-4.6-17.1 5.6-34.6 22.6-39.2l46.4-12.4 20.7 77.3c2.3 8.5 11.1 13.6 19.6 11.3l30.9-8.3c8.5-2.3 13.6-11.1 11.3-19.6l-20.7-77.3 46.4-12.4c17.1-4.6 34.6 5.6 39.2 22.6l41.4 154.5c4.6 17.1-5.6 34.6-22.6 39.2L103.7 384.9c-17.1 4.6-34.6-5.6-39.2-22.6L23.1 207.7z"></path></svg><small>Ground agent</small></div>
+      <div class="core"><span><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M256 0c4.6 0 9.2 1 13.4 2.9L457.7 82.8c22 9.3 38.4 31 38.3 57.2c-.5 99.2-41.3 280.7-213.6 363.2c-16.7 8-36.1 8-52.8 0C57.3 420.7 16.5 239.2 16 140c-.1-26.2 16.3-47.9 38.3-57.2L242.7 2.9C246.8 1 251.4 0 256 0zm0 66.8l0 378.1C394 378 431.1 230.1 432 141.4L256 66.8s0 0 0 0z"></path></svg></span><small>Safety kernel</small></div>
+    </div>
+  </div>
+  <div class="wrap stats-wrap">
+    <div class="stats">
+      <div class="stat"><b>0 of 1,000</b><span>unsafe plans accepted in testing <span class="label measured">measured</span></span></div>
+      <div class="stat"><b>79%</b><span>agreed in the first round <span class="label measured">measured</span></span></div>
+      <div class="stat"><b>~30 ms</b><span>median decision time, rule agents <span class="label measured">measured</span></span></div>
+      <div class="stat"><b>358,774</b><span>real delayed US flights to choose from <span class="label real">real data</span></span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== problem ===== -->
+<section id="problem">
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <p class="eyebrow">The problem</p>
+        <h2>One storm creates three competing clocks</h2>
+        <p class="lede">A thunderstorm cuts the arrival rate at a hub. A delayed flight is inbound, its gate may be taken,
+          the crew is near its duty limit and passengers have tight connections. Each organisation optimises its own piece.</p>
+      </div>
+    </div>
+    <div class="grid g3">
+      <article class="card clock">
+        <h3><span class="badge" style="--c:var(--teal)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 640 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M.3 166.9L0 68C0 57.7 9.5 50.1 19.5 52.3l35.6 7.9c10.6 2.3 19.2 9.9 23 20L96 128l127.3 37.6L181.8 20.4C178.9 10.2 186.6 0 197.2 0l40.1 0c11.6 0 22.2 6.2 27.9 16.3l109 193.8 107.2 31.7c15.9 4.7 30.8 12.5 43.7 22.8l34.4 27.6c24 19.2 18.1 57.3-10.7 68.2c-41.2 15.6-86.2 18.1-128.8 7L121.7 289.8c-11.1-2.9-21.2-8.7-29.3-16.9L9.5 189.4c-5.9-6-9.3-14.1-9.3-22.5zM32 448l576 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 512c-17.7 0-32-14.3-32-32s14.3-32 32-32zm96-80a32 32 0 1 1 64 0 32 32 0 1 1 -64 0zm128-16a32 32 0 1 1 0 64 32 32 0 1 1 0-64z"></path></svg></span>Runway</h3>
+        <ul><li>Arrival rate falls</li><li>Wake separation still applies</li><li>Controllers need a workable slot</li></ul>
+      </article>
+      <article class="card clock">
+        <h3><span class="badge" style="--c:var(--orange)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M192 93.7C192 59.5 221 0 256 0c36 0 64 59.5 64 93.7l0 66.3L497.8 278.5c8.9 5.9 14.2 15.9 14.2 26.6l0 56.7c0 10.9-10.7 18.6-21.1 15.2L320 320l0 80 57.6 43.2c4 3 6.4 7.8 6.4 12.8l0 42c0 7.8-6.3 14-14 14c-1.3 0-2.6-.2-3.9-.5L256 480 145.9 511.5c-1.3 .4-2.6 .5-3.9 .5c-7.8 0-14-6.3-14-14l0-42c0-5 2.4-9.8 6.4-12.8L192 400l0-80L21.1 377C10.7 380.4 0 372.7 0 361.8l0-56.7c0-10.7 5.3-20.7 14.2-26.6L192 160l0-66.3z"></path></svg></span>Aircraft</h3>
+        <ul><li>Fuel margin shrinks</li><li>Crew duty time keeps running</li><li>Passengers risk missed connections</li></ul>
+      </article>
+      <article class="card clock">
+        <h3><span class="badge" style="--c:var(--green)"><svg stroke="currentColor" fill="none" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M3.59 7h8.82a1 1 0 0 1 .902 1.433l-1.44 3a1 1 0 0 1 -.901 .567h-5.942a1 1 0 0 1 -.901 -.567l-1.44 -3a1 1 0 0 1 .901 -1.433"></path><path d="M6 7l-.78 -2.342a.5 .5 0 0 1 .473 -.658h4.612a.5 .5 0 0 1 .475 .658l-.78 2.342"></path><path d="M8 2v2"></path><path d="M6 12v9h4v-9"></path><path d="M3 21h18"></path><path d="M22 5h-6l-1 -1"></path><path d="M18 3l2 2l-2 2"></path><path d="M10 17h7a2 2 0 0 1 2 2v2"></path></svg></span>Gate + ramp</h3>
+        <ul><li>Original gate may be occupied</li><li>Taxiways can close</li><li>Ground shift has an end time</li></ul>
+      </article>
+    </div>
+    <div class="callout">
+      <span class="badge" style="--c:var(--coral)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M280 0C408.1 0 512 103.9 512 232c0 13.3-10.7 24-24 24s-24-10.7-24-24c0-101.6-82.4-184-184-184c-13.3 0-24-10.7-24-24s10.7-24 24-24zm8 192a32 32 0 1 1 0 64 32 32 0 1 1 0-64zm-32-72c0-13.3 10.7-24 24-24c75.1 0 136 60.9 136 136c0 13.3-10.7 24-24 24s-24-10.7-24-24c0-48.6-39.4-88-88-88c-13.3 0-24-10.7-24-24zM117.5 1.4c19.4-5.3 39.7 4.6 47.4 23.2l40 96c6.8 16.3 2.1 35.2-11.6 46.3L144 207.3c33.3 70.4 90.3 127.4 160.7 160.7L345 318.7c11.2-13.7 30-18.4 46.3-11.6l96 40c18.6 7.7 28.5 28 23.2 47.4l-24 88C481.8 499.9 466 512 448 512C200.6 512 0 311.4 0 64C0 46 12.1 30.2 29.5 25.4l88-24z"></path></svg></span>
+      <p>Today these teams reconcile the picture by phone and radio. In our scenarios the first-come-first-served plan was
+        <b>unsafe 73% of the time</b> <span class="label modelled">modelled</span></p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== how it works ===== -->
+<section id="how" style="padding-top:24px">
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <p class="eyebrow">How it works</p>
+        <h2>Two rounds, then a safe outcome</h2>
+        <p class="lede">A non-AI coordinator runs a fixed protocol with a hard two-round cap, as the brief's
+          "under three turns" asks. The loop can never run forever.</p>
+      </div>
+    </div>
+    <div class="flow">
+      <div class="step" style="--c:var(--teal)"><span class="n">1</span><h3>Disruption</h3><p>A real delayed flight plus generated airport context and ops notes.</p></div>
+      <div class="step" style="--c:var(--purple)"><span class="n">2</span><h3>Options</h3><p>Concrete plans from the menus: runway slots, gates, holds and diversions.</p></div>
+      <div class="step" style="--c:var(--coral)"><span class="n">3</span><h3>Safety check</h3><p>Pure code removes every unsafe plan before anyone votes.</p></div>
+      <div class="step" style="--c:var(--orange)"><span class="n">4</span><h3>Agents negotiate</h3><p>Each agent proposes, assesses with its own costs and votes with a reason code.</p></div>
+      <div class="step" style="--c:var(--green)"><span class="n">5</span><h3>You decide</h3><p>The duty manager approves, overrides with another safe plan, or rules on an exception.</p></div>
+    </div>
+    <div class="outcomes" aria-label="Possible outcomes">
+      <span class="chip" style="--c:#3f9a52"><i></i>Agreed</span>
+      <span class="chip" style="--c:var(--teal)"><i></i>Compromise</span>
+      <span class="chip" style="--c:var(--orange)"><i></i>Standard plan used</span>
+      <span class="chip" style="--c:#d39b2b"><i></i>Needs your approval</span>
+      <span class="chip" style="--c:var(--coral)"><i></i>No safe plan</span>
+    </div>
+  </div>
+</section>
+
+<!-- ===== AI vs code ===== -->
+<section style="padding-top:24px">
+  <div class="wrap">
+    <div class="head"><div><p class="eyebrow">The design rule</p><h2>AI argues. Code decides.</h2>
+      <p class="lede">Language models are good at reading messy text and explaining themselves. They can't be trusted with
+        arithmetic or legality, so they never get it.</p></div></div>
+    <div class="split">
+      <div class="side ai">
+        <h3><span class="badge" style="--c:var(--teal)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 640 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M320 0c17.7 0 32 14.3 32 32l0 64 120 0c39.8 0 72 32.2 72 72l0 272c0 39.8-32.2 72-72 72l-304 0c-39.8 0-72-32.2-72-72l0-272c0-39.8 32.2-72 72-72l120 0 0-64c0-17.7 14.3-32 32-32zM208 384c-8.8 0-16 7.2-16 16s7.2 16 16 16l32 0c8.8 0 16-7.2 16-16s-7.2-16-16-16l-32 0zm96 0c-8.8 0-16 7.2-16 16s7.2 16 16 16l32 0c8.8 0 16-7.2 16-16s-7.2-16-16-16l-32 0zm96 0c-8.8 0-16 7.2-16 16s7.2 16 16 16l32 0c8.8 0 16-7.2 16-16s-7.2-16-16-16l-32 0zM264 256a40 40 0 1 0 -80 0 40 40 0 1 0 80 0zm152 40a40 40 0 1 0 0-80 40 40 0 1 0 0 80zM48 224l16 0 0 192-16 0c-26.5 0-48-21.5-48-48l0-96c0-26.5 21.5-48 48-48zm544 0c26.5 0 48 21.5 48 48l0 96c0 26.5-21.5 48-48 48l-16 0 0-192 16 0z"></path></svg></span>What the AI agents do</h3>
+        <ul>
+          <li><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"></path></svg>Read free-text ops notes into a fixed, restrict-only format</li>
+          <li><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"></path></svg>Propose plans from the menus, never invented IDs</li>
+          <li><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"></path></svg>Vote on the shortlist with a reason code and a short rationale</li>
+          <li><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"></path></svg>Explain their position to the duty manager</li>
+        </ul>
+      </div>
+      <div class="side code">
+        <h3><span class="badge" style="--c:var(--purple)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 640 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M308.5 135.3c7.1-6.3 9.9-16.2 6.2-25c-2.3-5.3-4.8-10.5-7.6-15.5L304 89.4c-3-5-6.3-9.9-9.8-14.6c-5.7-7.6-15.7-10.1-24.7-7.1l-28.2 9.3c-10.7-8.8-23-16-36.2-20.9L199 27.1c-1.9-9.3-9.1-16.7-18.5-17.8C173.9 8.4 167.2 8 160.4 8l-.7 0c-6.8 0-13.5 .4-20.1 1.2c-9.4 1.1-16.6 8.6-18.5 17.8L115 56.1c-13.3 5-25.5 12.1-36.2 20.9L50.5 67.8c-9-3-19-.5-24.7 7.1c-3.5 4.7-6.8 9.6-9.9 14.6l-3 5.3c-2.8 5-5.3 10.2-7.6 15.6c-3.7 8.7-.9 18.6 6.2 25l22.2 19.8C32.6 161.9 32 168.9 32 176s.6 14.1 1.7 20.9L11.5 216.7c-7.1 6.3-9.9 16.2-6.2 25c2.3 5.3 4.8 10.5 7.6 15.6l3 5.2c3 5.1 6.3 9.9 9.9 14.6c5.7 7.6 15.7 10.1 24.7 7.1l28.2-9.3c10.7 8.8 23 16 36.2 20.9l6.1 29.1c1.9 9.3 9.1 16.7 18.5 17.8c6.7 .8 13.5 1.2 20.4 1.2s13.7-.4 20.4-1.2c9.4-1.1 16.6-8.6 18.5-17.8l6.1-29.1c13.3-5 25.5-12.1 36.2-20.9l28.2 9.3c9 3 19 .5 24.7-7.1c3.5-4.7 6.8-9.5 9.8-14.6l3.1-5.4c2.8-5 5.3-10.2 7.6-15.5c3.7-8.7 .9-18.6-6.2-25l-22.2-19.8c1.1-6.8 1.7-13.8 1.7-20.9s-.6-14.1-1.7-20.9l22.2-19.8zM112 176a48 48 0 1 1 96 0 48 48 0 1 1 -96 0zM504.7 500.5c6.3 7.1 16.2 9.9 25 6.2c5.3-2.3 10.5-4.8 15.5-7.6l5.4-3.1c5-3 9.9-6.3 14.6-9.8c7.6-5.7 10.1-15.7 7.1-24.7l-9.3-28.2c8.8-10.7 16-23 20.9-36.2l29.1-6.1c9.3-1.9 16.7-9.1 17.8-18.5c.8-6.7 1.2-13.5 1.2-20.4s-.4-13.7-1.2-20.4c-1.1-9.4-8.6-16.6-17.8-18.5L583.9 307c-5-13.3-12.1-25.5-20.9-36.2l9.3-28.2c3-9 .5-19-7.1-24.7c-4.7-3.5-9.6-6.8-14.6-9.9l-5.3-3c-5-2.8-10.2-5.3-15.6-7.6c-8.7-3.7-18.6-.9-25 6.2l-19.8 22.2c-6.8-1.1-13.8-1.7-20.9-1.7s-14.1 .6-20.9 1.7l-19.8-22.2c-6.3-7.1-16.2-9.9-25-6.2c-5.3 2.3-10.5 4.8-15.6 7.6l-5.2 3c-5.1 3-9.9 6.3-14.6 9.9c-7.6 5.7-10.1 15.7-7.1 24.7l9.3 28.2c-8.8 10.7-16 23-20.9 36.2L315.1 313c-9.3 1.9-16.7 9.1-17.8 18.5c-.8 6.7-1.2 13.5-1.2 20.4s.4 13.7 1.2 20.4c1.1 9.4 8.6 16.6 17.8 18.5l29.1 6.1c5 13.3 12.1 25.5 20.9 36.2l-9.3 28.2c-3 9-.5 19 7.1 24.7c4.7 3.5 9.5 6.8 14.6 9.8l5.4 3.1c5 2.8 10.2 5.3 15.5 7.6c8.7 3.7 18.6 .9 25-6.2l19.8-22.2c6.8 1.1 13.8 1.7 20.9 1.7s14.1-.6 20.9-1.7l19.8 22.2zM464 304a48 48 0 1 1 0 96 48 48 0 1 1 0-96z"></path></svg></span>What code does</h3>
+        <ul>
+          <li><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"></path></svg>All arithmetic: times, fuel, delay, costs</li>
+          <li><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"></path></svg>All legality: 12 numbered constraints, each with a source</li>
+          <li><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"></path></svg>When to stop: round cap, binding compromise, fallback, escalation</li>
+          <li><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512zM369 209L241 337c-9.4 9.4-24.6 9.4-33.9 0l-64-64c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l47 47L335 175c9.4-9.4 24.6-9.4 33.9 0s9.4 24.6 0 33.9z"></path></svg>The audit log, and replaying it without any AI</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== features ===== -->
+<section id="features" style="padding-top:24px">
+  <div class="wrap">
+    <div class="head"><div><p class="eyebrow">Features</p><h2>Built for a duty manager who has to trust it</h2></div></div>
+    <div class="grid g4">
+
+      <article class="card feature">
+        <span class="badge" style="--c: var(--teal)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 576 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M80.3 44C69.8 69.9 64 98.2 64 128s5.8 58.1 16.3 84c6.6 16.4-1.3 35-17.7 41.7s-35-1.3-41.7-17.7C7.4 202.6 0 166.1 0 128S7.4 53.4 20.9 20C27.6 3.6 46.2-4.3 62.6 2.3S86.9 27.6 80.3 44zM555.1 20C568.6 53.4 576 89.9 576 128s-7.4 74.6-20.9 108c-6.6 16.4-25.3 24.3-41.7 17.7S489.1 228.4 495.7 212c10.5-25.9 16.3-54.2 16.3-84s-5.8-58.1-16.3-84C489.1 27.6 497 9 513.4 2.3s35 1.3 41.7 17.7zM352 128c0 23.7-12.9 44.4-32 55.4L320 480c0 17.7-14.3 32-32 32s-32-14.3-32-32l0-296.6c-19.1-11.1-32-31.7-32-55.4c0-35.3 28.7-64 64-64s64 28.7 64 64zM170.6 76.8C163.8 92.4 160 109.7 160 128s3.8 35.6 10.6 51.2c7.1 16.2-.3 35.1-16.5 42.1s-35.1-.3-42.1-16.5c-10.3-23.6-16-49.6-16-76.8s5.7-53.2 16-76.8c7.1-16.2 25.9-23.6 42.1-16.5s23.6 25.9 16.5 42.1zM464 51.2c10.3 23.6 16 49.6 16 76.8s-5.7 53.2-16 76.8c-7.1 16.2-25.9 23.6-42.1 16.5s-23.6-25.9-16.5-42.1c6.8-15.6 10.6-32.9 10.6-51.2s-3.8-35.6-10.6-51.2c-7.1-16.2 .3-35.1 16.5-42.1s35.1 .3 42.1 16.5z"></path></svg></span>
+        <h3>Three independent agents</h3>
+        <p>ATC, pilot / airline and ground ops are three separate AI calls with their own prompts, private data and costs.</p>
+      </article>
+
+      <article class="card feature">
+        <span class="badge" style="--c: var(--coral)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M256 0c4.6 0 9.2 1 13.4 2.9L457.7 82.8c22 9.3 38.4 31 38.3 57.2c-.5 99.2-41.3 280.7-213.6 363.2c-16.7 8-36.1 8-52.8 0C57.3 420.7 16.5 239.2 16 140c-.1-26.2 16.3-47.9 38.3-57.2L242.7 2.9C246.8 1 251.4 0 256 0zm0 66.8l0 378.1C394 378 431.1 230.1 432 141.4L256 66.8s0 0 0 0z"></path></svg></span>
+        <h3>Deterministic safety kernel</h3>
+        <p>Runway, wake separation, fuel, crew duty, gate size, gate conflicts and taxiways, checked by pure code every time.</p>
+      </article>
+
+      <article class="card feature">
+        <span class="badge" style="--c: var(--green)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 448 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M96 128a128 128 0 1 0 256 0A128 128 0 1 0 96 128zm94.5 200.2l18.6 31L175.8 483.1l-36-146.9c-2-8.1-9.8-13.4-17.9-11.3C51.9 342.4 0 405.8 0 481.3c0 17 13.8 30.7 30.7 30.7l131.7 0c0 0 0 0 .1 0l5.5 0 112 0 5.5 0c0 0 0 0 .1 0l131.7 0c17 0 30.7-13.8 30.7-30.7c0-75.5-51.9-138.9-121.9-156.4c-8.1-2-15.9 3.3-17.9 11.3l-36 146.9L238.9 359.2l18.6-31c6.4-10.7-1.3-24.2-13.7-24.2L224 304l-19.7 0c-12.4 0-20.1 13.6-13.7 24.2z"></path></svg></span>
+        <h3>Human in control</h3>
+        <p>Approve, override with another kernel-checked plan, or approve a single company-policy exception. Safety limits are never relaxed.</p>
+      </article>
+
+      <article class="card feature">
+        <span class="badge" style="--c: var(--orange)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M256 32c14.2 0 27.3 7.5 34.5 19.8l216 368c7.3 12.4 7.3 27.7 .2 40.1S486.3 480 472 480L40 480c-14.3 0-27.6-7.7-34.7-20.1s-7-27.8 .2-40.1l216-368C228.7 39.5 241.8 32 256 32zm0 128c-13.3 0-24 10.7-24 24l0 112c0 13.3 10.7 24 24 24s24-10.7 24-24l0-112c0-13.3-10.7-24-24-24zm32 224a32 32 0 1 0 -64 0 32 32 0 1 0 64 0z"></path></svg></span>
+        <h3>Says no when it should</h3>
+        <p>When nothing is safe it refuses, names the blocking constraint and the person who must act.</p>
+      </article>
+
+      <article class="card feature">
+        <span class="badge" style="--c: var(--purple)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 448 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M144 144l0 48 160 0 0-48c0-44.2-35.8-80-80-80s-80 35.8-80 80zM80 192l0-48C80 64.5 144.5 0 224 0s144 64.5 144 144l0 48 16 0c35.3 0 64 28.7 64 64l0 192c0 35.3-28.7 64-64 64L64 512c-35.3 0-64-28.7-64-64L0 256c0-35.3 28.7-64 64-64l16 0z"></path></svg></span>
+        <h3>Private data stays private</h3>
+        <p>Agents share only a cost and a reason code per plan, never fuel figures, crew hours or passenger counts.</p>
+      </article>
+
+      <article class="card feature">
+        <span class="badge" style="--c: var(--teal)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 640 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M579.8 267.7c56.5-56.5 56.5-148 0-204.5c-50-50-128.8-56.5-186.3-15.4l-1.6 1.1c-14.4 10.3-17.7 30.3-7.4 44.6s30.3 17.7 44.6 7.4l1.6-1.1c32.1-22.9 76-19.3 103.8 8.6c31.5 31.5 31.5 82.5 0 114L422.3 334.8c-31.5 31.5-82.5 31.5-114 0c-27.9-27.9-31.5-71.8-8.6-103.8l1.1-1.6c10.3-14.4 6.9-34.4-7.4-44.6s-34.4-6.9-44.6 7.4l-1.1 1.6C206.5 251.2 213 330 263 380c56.5 56.5 148 56.5 204.5 0L579.8 267.7zM60.2 244.3c-56.5 56.5-56.5 148 0 204.5c50 50 128.8 56.5 186.3 15.4l1.6-1.1c14.4-10.3 17.7-30.3 7.4-44.6s-30.3-17.7-44.6-7.4l-1.6 1.1c-32.1 22.9-76 19.3-103.8-8.6C74 372 74 321 105.5 289.5L217.7 177.2c31.5-31.5 82.5-31.5 114 0c27.9 27.9 31.5 71.8 8.6 103.9l-1.1 1.6c-10.3 14.4-6.9 34.4 7.4 44.6s34.4 6.9 44.6-7.4l1.1-1.6C433.5 260.8 427 182 377 132c-56.5-56.5-148-56.5-204.5 0L60.2 244.3z"></path></svg></span>
+        <h3>Tamper-evident audit log</h3>
+        <p>Every step is hash-chained. Verify replays any run without calling an AI, and a one-byte edit is caught.</p>
+      </article>
+
+      <article class="card feature">
+        <span class="badge" style="--c: var(--coral)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 448 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M224 16c-6.7 0-10.8-2.8-15.5-6.1C201.9 5.4 194 0 176 0c-30.5 0-52 43.7-66 89.4C62.7 98.1 32 112.2 32 128c0 14.3 25 27.1 64.6 35.9c-.4 4-.6 8-.6 12.1c0 17 3.3 33.2 9.3 48l-59.9 0C38 224 32 230 32 237.4c0 1.7 .3 3.4 1 5l38.8 96.9C28.2 371.8 0 423.8 0 482.3C0 498.7 13.3 512 29.7 512l388.6 0c16.4 0 29.7-13.3 29.7-29.7c0-58.5-28.2-110.4-71.7-143L415 242.4c.6-1.6 1-3.3 1-5c0-7.4-6-13.4-13.4-13.4l-59.9 0c6-14.8 9.3-31 9.3-48c0-4.1-.2-8.1-.6-12.1C391 155.1 416 142.3 416 128c0-15.8-30.7-29.9-78-38.6C324 43.7 302.5 0 272 0c-18 0-25.9 5.4-32.5 9.9c-4.8 3.3-8.8 6.1-15.5 6.1zm56 208l-12.4 0c-16.5 0-31.1-10.6-36.3-26.2c-2.3-7-12.2-7-14.5 0c-5.2 15.6-19.9 26.2-36.3 26.2L168 224c-22.1 0-40-17.9-40-40l0-14.4c28.2 4.1 61 6.4 96 6.4s67.8-2.3 96-6.4l0 14.4c0 22.1-17.9 40-40 40zm-88 96l16 32L176 480 128 288l64 32zm128-32L272 480 240 352l16-32 64-32z"></path></svg></span>
+        <h3>Prompt-injection resistant</h3>
+        <p>Free text can only add restrictions. An injected “ignore the fuel reserve” has nowhere to go.</p>
+      </article>
+
+      <article class="card feature">
+        <span class="badge" style="--c: var(--green)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 448 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M288 0L160 0 128 0C110.3 0 96 14.3 96 32s14.3 32 32 32l0 132.8c0 11.8-3.3 23.5-9.5 33.5L10.3 406.2C3.6 417.2 0 429.7 0 442.6C0 480.9 31.1 512 69.4 512l309.2 0c38.3 0 69.4-31.1 69.4-69.4c0-12.8-3.6-25.4-10.3-36.4L329.5 230.4c-6.2-10.1-9.5-21.7-9.5-33.5L320 64c17.7 0 32-14.3 32-32s-14.3-32-32-32L288 0zM192 196.8L192 64l64 0 0 132.8c0 23.7 6.6 46.9 19 67.1L309.5 320l-171 0L173 263.9c12.4-20.2 19-43.4 19-67.1z"></path></svg></span>
+        <h3>What-if lab</h3>
+        <p>Move sliders for fuel, crew duty, runway congestion, gates, connections and cost weights; every change is labelled synthetic.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ===== simulate ===== -->
+<section id="simulate" style="padding-top:24px">
+  <div class="wrap">
+    <div class="head"><div><p class="eyebrow">What you can simulate</p><h2>Any delayed flight, any disruption</h2></div></div>
+    <div class="sim">
+      <div class="card">
+        <ul class="simlist">
+          <li><span class="badge" style="--c:var(--teal)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352a144 144 0 1 0 0-288 144 144 0 1 0 0 288z"></path></svg></span><div><b>Pick a real flight</b><span>Search by flight number, filter by airport and cause, or press Random flight. 358,774 delayed flights in 2015 US data.</span></div></li>
+          <li><span class="badge" style="--c:var(--coral)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M0 224c0 53 43 96 96 96l47.2 0L290 202.5c17.6-14.1 42.6-14 60.2 .2s22.8 38.6 12.8 58.8L333.7 320l18.3 0 64 0c53 0 96-43 96-96s-43-96-96-96c-.5 0-1.1 0-1.6 0c1.1-5.2 1.6-10.5 1.6-16c0-44.2-35.8-80-80-80c-24.3 0-46.1 10.9-60.8 28C256.5 24.3 219.1 0 176 0C114.1 0 64 50.1 64 112c0 7.1 .7 14.1 1.9 20.8C27.6 145.4 0 181.5 0 224zm330.1 3.6c-5.8-4.7-14.2-4.7-20.1-.1l-160 128c-5.3 4.2-7.4 11.4-5.1 17.8s8.3 10.7 15.1 10.7l70.1 0L177.7 488.8c-3.4 6.7-1.6 14.9 4.3 19.6s14.2 4.7 20.1 .1l160-128c5.3-4.2 7.4-11.4 5.1-17.8s-8.3-10.7-15.1-10.7l-70.1 0 52.4-104.8c3.4-6.7 1.6-14.9-4.2-19.6z"></path></svg></span><div><b>Inject a disruption</b><span>Close a taxiway, fail a gate's jet bridge, report turbulence in the hold, or try a prompt-injection attack.</span></div></li>
+          <li><span class="badge" style="--c:var(--purple)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 448 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M288 0L160 0 128 0C110.3 0 96 14.3 96 32s14.3 32 32 32l0 132.8c0 11.8-3.3 23.5-9.5 33.5L10.3 406.2C3.6 417.2 0 429.7 0 442.6C0 480.9 31.1 512 69.4 512l309.2 0c38.3 0 69.4-31.1 69.4-69.4c0-12.8-3.6-25.4-10.3-36.4L329.5 230.4c-6.2-10.1-9.5-21.7-9.5-33.5L320 64c17.7 0 32-14.3 32-32s-14.3-32-32-32L288 0zM192 196.8L192 64l64 0 0 132.8c0 23.7 6.6 46.9 19 67.1L309.5 320l-171 0L173 263.9c12.4-20.2 19-43.4 19-67.1z"></path></svg></span><div><b>Test assumptions</b><span>Presets for a tight ramp shift, a thunderstorm capacity cut, a crew near its duty limit, and far-apart connections.</span></div></li>
+          <li><span class="badge" style="--c:var(--orange)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 640 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M274.9 34.3c-28.1-28.1-73.7-28.1-101.8 0L34.3 173.1c-28.1 28.1-28.1 73.7 0 101.8L173.1 413.7c28.1 28.1 73.7 28.1 101.8 0L413.7 274.9c28.1-28.1 28.1-73.7 0-101.8L274.9 34.3zM200 224a24 24 0 1 1 48 0 24 24 0 1 1 -48 0zM96 200a24 24 0 1 1 0 48 24 24 0 1 1 0-48zM224 376a24 24 0 1 1 0-48 24 24 0 1 1 0 48zM352 200a24 24 0 1 1 0 48 24 24 0 1 1 0-48zM224 120a24 24 0 1 1 0-48 24 24 0 1 1 0 48zm96 328c0 35.3 28.7 64 64 64l192 0c35.3 0 64-28.7 64-64l0-192c0-35.3-28.7-64-64-64l-114.3 0c11.6 36 3.1 77-25.4 105.5L320 413.8l0 34.2zM480 328a24 24 0 1 1 0 48 24 24 0 1 1 0-48z"></path></svg></span><div><b>Swap the negotiators</b><span>Rule-based agents, Claude-powered LLM agents, random proposers, or a red team trying to break the rules.</span></div></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Plans the agents can agree on</h3>
+        <div class="tags"><span class="tag">Land as planned</span><span class="tag">Hold</span><span class="tag">Re-gate</span><span class="tag">Hold and re-gate</span><span class="tag">Remote stand</span><span class="tag">Divert to an alternate</span></div>
+        <h3 style="margin-top:28px">What-if parameters</h3>
+        <div class="tags"><span class="tag">Ground shift end</span><span class="tag">Original gate taken</span><span class="tag">Concourses</span><span class="tag">Transfer times</span><span class="tag">Connecting passengers</span><span class="tag">Holding fuel</span><span class="tag">Crew duty end</span><span class="tag">Runway slots taken</span><span class="tag">10 cost weights</span></div>
+        <h3 style="margin-top:28px">Every run shows</h3>
+        <div class="tags"><span class="tag">Outcome and plan</span><span class="tag">Impact vs status quo</span><span class="tag">Each party's cost</span><span class="tag">Round-by-round votes</span><span class="tag">Safety margins</span><span class="tag">Full audit log</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== results ===== -->
+<section id="results" class="results">
+  <div class="wrap">
+    <div class="head"><div><p class="eyebrow">Results</p><h2>Tested on 1,000 real-flight scenarios</h2>
+      <p class="lede">Rule agents on 100 DOT 2015 flights × 10 seeds, plus 500 worlds each for random and red-team agents.
+        Every number is labelled measured or modelled.</p></div></div>
+    <div class="grid g3">
+      <div class="rcard"><span class="label measured">measured</span><b>0</b><p>unsafe plans accepted in 1,000 runs. Random and red-team agents proposed 5,297 unsafe plans; none got through.</p></div>
+      <div class="rcard"><span class="label measured">measured</span><b>30 / 30</b><p>red-team attacks caught: invented gates, contradictions, malformed messages, prompt injection and vote manipulation.</p></div>
+      <div class="rcard"><span class="label measured">measured</span><b>99%</b><p>of escalations to the duty manager were necessary: no compliant plan existed (n = 211).</p></div>
+      <div class="rcard"><span class="label modelled">modelled</span><b>&minus;2.3%</b><p>total cost vs a well-designed rule, never worse, and cheaper in 25% of flights by up to $6,650.</p></div>
+      <div class="rcard"><span class="label modelled">modelled</span><b>0.9%</b><p>from the best possible plan, which would need every organisation's private data.</p></div>
+      <div class="rcard"><span class="label measured">measured</span><b>r = 0.96</b><p>delay-propagation model checked against 60,320 real chained aircraft legs (mean error 9.9 min).</p></div>
+    </div>
+    <div class="bars" aria-label="Share of scenarios with an unsafe plan">
+      <div class="bar" style="--c:var(--coral);--w:73%"><span class="t">Status quo (first come, first served)</span><span class="track"><span class="fill"></span></span><span class="v">73%</span></div>
+      <div class="bar" style="--c:#8fc79a;--w:0.6%"><span class="t">AirSync decision</span><span class="track"><span class="fill"></span></span><span class="v">0%</span></div>
+    </div>
+    <p class="note">Share of scenarios where the plan breaks a safety or physical rule. Costs use config/costs.yaml: delay and fuel prices are sourced, the rest are team estimates.</p>
+  </div>
+</section>
+
+<!-- ===== data ===== -->
+<section id="data">
+  <div class="wrap">
+    <div class="head"><div><p class="eyebrow">Data</p><h2>Real flights, labelled assumptions</h2></div></div>
+    <div class="notmodel">
+      <span class="badge" style="--c:var(--teal)"><svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 448 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M448 80l0 48c0 44.2-100.3 80-224 80S0 172.2 0 128L0 80C0 35.8 100.3 0 224 0S448 35.8 448 80zM393.2 214.7c20.8-7.4 39.9-16.9 54.8-28.6L448 288c0 44.2-100.3 80-224 80S0 332.2 0 288L0 186.1c14.9 11.8 34 21.2 54.8 28.6C99.7 230.7 159.5 240 224 240s124.3-9.3 169.2-25.3zM0 346.1c14.9 11.8 34 21.2 54.8 28.6C99.7 390.7 159.5 400 224 400s124.3-9.3 169.2-25.3c20.8-7.4 39.9-16.9 54.8-28.6l0 85.9c0 44.2-100.3 80-224 80S0 476.2 0 432l0-85.9z"></path></svg></span>
+      <div><b>Not a trained model.</b>
+        <p>AirSync doesn't train or fine-tune anything. The agents use Claude as-is for reading and arguing, and every number
+          comes from deterministic code over the data below. Synthetic values are generated by a seeded generator, so the same
+          flight and seed always give the same world.</p></div>
+    </div>
+    <table>
+      <thead><tr><th>Source</th><th>What it provides</th><th>Details</th><th>Label</th></tr></thead>
+      <tbody>
+        <tr><td>US DOT 2015 flight delays</td><td>The disrupted flight: airline, route, schedule, recorded delay and cause</td><td>358,774 delayed flights (weather delay over 15 min or late aircraft over 20 min), with tail numbers for rotations</td><td><span class="label real">real</span></td></tr>
+        <tr><td>Airports and airlines</td><td>Locations for distances and diversion alternates; carrier names</td><td>322 US airports, 14 airlines</td><td><span class="label real">real</span></td></tr>
+        <tr><td>Delay and fuel prices</td><td>Cost per minute of delay and per kg of fuel</td><td>A4A 2024 delay cost ($67.70/min excl. fuel); BTS jet fuel, Oct 2015 ($0.54/kg)</td><td><span class="label real">sourced</span></td></tr>
+        <tr><td>Airport context</td><td>Runway slots and traffic, gates and occupancy, fuel on board, crew duty, ground shift, connections, ops notes</td><td>Seeded generator with ranges in config/synthetic.yaml</td><td><span class="label synthetic">synthetic</span></td></tr>
+        <tr><td>Rules and constants</td><td>Safety thresholds, overtime policy, other cost weights</td><td>FAA / ICAO rules simplified; policy and remaining costs are team estimates</td><td><span class="label assumed">assumed</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ===== limits ===== -->
+<section id="limits" style="padding-top:24px">
+  <div class="wrap">
+    <div class="split">
+      <div class="card">
+        <p class="eyebrow">Honest limits</p>
+        <h3>Where it can fail, and how you'd know</h3>
+        <ul class="limits">
+          <li><b>Synthetic airport context.</b> Gates, fuel and crew are generated; results that depend on them are labelled modelled.</li>
+          <li><b>Self-reported costs.</b> An agent that lies about its own cost could steer the outcome. Stated openly; the fix is mechanism design or audit.</li>
+          <li><b>No delay reduction claimed.</b> In this model every plan takes the earliest legal slot; the gains are safety and cost, not minutes.</li>
+          <li><b>Simplified rules.</b> Wake and fuel checks are simplified versions of the real procedures.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <p class="eyebrow">Built with</p>
+        <h3>Small, testable, reproducible</h3>
+        <ul class="limits">
+          <li><b>Python</b> with pydantic contracts for every message between components</li>
+          <li><b>Claude</b> through the Anthropic SDK, with structured output and a retry-then-rule-agent fallback</li>
+          <li><b>Streamlit</b> dashboard for the duty manager</li>
+          <li><b>562 automated tests</b>, a hash-chained ledger and a verify command that replays runs without AI</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== final cta ===== -->
+<section style="padding-top:24px">
+  <div class="wrap">
+    <div class="final">
+      <div>
+        <h2>See it decide on a live flight</h2>
+        <p>Pick a real delayed flight, add a disruption, watch three agents negotiate, and make the call yourself.</p>
+        <div class="cta-row"><a class="btn btn-primary go-product" href="http://localhost:8501">Go to product <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 448 512" aria-hidden="true" focusable="false" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg"><path d="M438.6 278.6c12.5-12.5 12.5-32.8 0-45.3l-160-160c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L338.8 224 32 224c-17.7 0-32 14.3-32 32s14.3 32 32 32l306.7 0L233.4 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0l160-160z"></path></svg></a></div>
+      </div>
+      <div class="run" aria-label="How to start the product">
+        <div class="c"># start the dashboard, then press Go to product</div>
+        <div>pip install -r requirements.txt</div>
+        <div>streamlit run app/dashboard.py</div>
+        <div class="c"># optional: LLM agents need ANTHROPIC_API_KEY in .env</div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span><b>AirSync</b> · Autonomous SG 2026 · Airbus Track, Challenge 02</span>
+    <span>Real DOT 2015 flights · synthetic context labelled · a human makes the final call</span>
+  </div>
+</footer>
+
+<script>
+  // "Go to product" opens the running dashboard. Override with ?app=<url> if it runs elsewhere.
+  (function () {
+    var target = new URLSearchParams(location.search).get("app");
+    if (!target) return;
+    document.querySelectorAll(".go-product").forEach(function (a) { a.href = target; });
+  })();
+</script>
+</body>
+</html>
