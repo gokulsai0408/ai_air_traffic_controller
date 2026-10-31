@@ -1,6 +1,6 @@
 # generated data (raw data in data/*.csv IS committed)
 data/derived/
-runs/*.jsonl
+runs/**/*.jsonl
 eval/results/*.tmp
 
 # secrets
