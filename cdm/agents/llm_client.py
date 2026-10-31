@@ -12,6 +12,7 @@ from __future__ import annotations
 import copy
 import os
 import threading
+from pathlib import Path
 from typing import Any, Callable
 
 LLMClient = Callable[[str, str, dict], str]   # (system, user, json_schema) -> raw JSON text
@@ -51,10 +52,24 @@ _lock = threading.Lock()
 _fallbacks_ok = USE_FALLBACKS
 
 
+ENV_FILE = Path(__file__).resolve().parents[2] / ".env"   # gitignored; never commit keys
+
+
+def _load_env_file() -> None:
+    """Fill missing ANTHROPIC_* variables from the repo's .env, if there is one."""
+    if not ENV_FILE.exists():
+        return
+    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+        key, sep, value = line.strip().partition("=")
+        if sep and key.startswith("ANTHROPIC_") and key not in os.environ:
+            os.environ[key] = value.strip().strip('"').strip("'")
+
+
 def _get_client():
     global _client
     with _lock:
         if _client is None:
+            _load_env_file()
             import anthropic
             _client = anthropic.Anthropic(timeout=TIMEOUT_S, max_retries=0)   # callers own the retry
         return _client
