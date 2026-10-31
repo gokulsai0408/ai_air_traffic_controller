@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from cdm.data import load_flights, parse_hhmm
-from tests.helpers import FIXTURES, sample_cfg, sample_flights
+from helpers import FIXTURES, sample_cfg, sample_flights
 
 
 @pytest.mark.parametrize("value,expected", [
@@ -64,6 +64,11 @@ def test_scheduled_time_keeps_real_overnight_arrival(tmp_path):
 def test_next_leg_before_arrival_is_not_a_next_leg(tmp_path):
     df = _with_scheduled_times(tmp_path, {"1500": {"SCHEDULED_DEPARTURE": "1940"}})
     assert pd.isna(df.query("FLIGHT_NUMBER == 1234").iloc[0]["NEXT_SCHED_DEP_DT"])
+
+
+def test_flight_key_has_contract_name():
+    df = sample_flights()
+    assert df["flight_key"].equals(df["FLIGHT_KEY"])
 
 
 def test_flight_keys_unique():

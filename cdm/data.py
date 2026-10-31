@@ -58,6 +58,7 @@ def load_flights(path) -> pd.DataFrame:
         date.dt.strftime("%Y%m%d") + "-" + df["AIRLINE"].astype(str) + df["FLIGHT_NUMBER"].astype(str)
         + "-" + df["ORIGIN_AIRPORT"] + "-" + df["DESTINATION_AIRPORT"] + "-" + df["SCHEDULED_DEPARTURE"].str.zfill(4)
     )
+    df["flight_key"] = df["FLIGHT_KEY"]     # plan section 6.3 name; eval reads this one
     return _add_next_leg(df)
 
 

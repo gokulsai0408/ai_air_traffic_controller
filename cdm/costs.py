@@ -9,11 +9,15 @@ from .schemas import Derived, Option
 from .world import REMOTE_GATE, World, timeline
 
 
+def hold_fuel_kg(option: Option, derived: Derived, world: World) -> float:
+    return float(timeline(option, world).hold_min * world.pilot.hold_flow_kg_per_min)
+
+
 def cost_pilot(option: Option, derived: Derived, world: World) -> float:
     line = timeline(option, world)
     delay = line.on_block_min - (world.public.eta_min + world.public.taxi_in_min)
     cost = (delay * world.cost("cost_per_delay_min")
-            + line.hold_min * world.pilot.hold_flow_kg_per_min * world.cost("fuel_price_usd_per_kg")
+            + hold_fuel_kg(option, derived, world) * world.cost("fuel_price_usd_per_kg")
             + derived.missed_pax * world.cost("cost_per_missed_pax"))
     if line.diverted:
         cost += world.cost("divert_fixed")

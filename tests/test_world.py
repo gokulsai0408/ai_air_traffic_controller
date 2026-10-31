@@ -5,10 +5,10 @@ import time
 
 import pytest
 
-from cdm.costs import cost_atc, cost_ground, cost_pilot
+from cdm.costs import cost_atc, cost_ground, cost_pilot, hold_fuel_kg
 from cdm.schemas import ActionType, OpsFacts, Option
 from cdm.world import REMOTE_GATE, World, apply_ops_facts, build_world, derive
-from tests.helpers import find_feasible, option_for, sample_cfg, sample_flights
+from helpers import find_feasible, option_for, sample_cfg, sample_flights
 
 CFG = sample_cfg()
 FLIGHTS = sample_flights()
@@ -200,6 +200,26 @@ def test_short_turn_capped_so_divert_never_beats_landing_on_a_blown_next_leg():
     land_cost = cost_ground(land, derive(land, world), world) - derive(land, world).ground_overtime_min * CFG.cost("overtime_rate_per_min")
     assert land_cost == pytest.approx(world.ground.min_turn_min * CFG.cost("turn_penalty_per_min"))
     assert cost_ground(divert, derive(divert, world), world) == pytest.approx(land_cost)
+
+
+def test_derived_times_are_clock_strings():
+    world = calm_world()
+    derived = derive(option_for(world, world.menus.slots[0], REMOTE_GATE), world)
+    assert derived.landing_time == world.fmt_time(next(s.time_min for s in world.safety_view.slots if s.slot_id == world.menus.slots[0]))[-5:]
+    assert len(derived.on_block_time) == 5 and derived.on_block_time[2] == ":"
+
+
+def test_divert_has_no_destination_times():
+    world = calm_world()
+    derived = derive(option_for(world, divert_to=world.menus.alternates[0]), world)
+    assert derived.landing_time is None and derived.on_block_time is None
+
+
+def test_hold_fuel_uses_real_wait():
+    world = calm_world()
+    option = option_for(world, world.menus.slots[-1], REMOTE_GATE)
+    expected = (next(s.time_min for s in world.safety_view.slots if s.slot_id == option.slot_id) - world.public.eta_min) * world.pilot.hold_flow_kg_per_min
+    assert hold_fuel_kg(option, derive(option, world), world) == pytest.approx(expected, abs=world.pilot.hold_flow_kg_per_min)
 
 
 def test_costs_never_negative():

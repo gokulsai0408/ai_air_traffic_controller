@@ -95,6 +95,10 @@ class World(BaseModel):
         moment = pd.Timestamp(self.base_date) + pd.Timedelta(minutes=round(minutes))
         return moment.strftime("%Y-%m-%dT%H:%M")
 
+    def fmt_clock(self, minutes: float) -> str:
+        """HH:MM as Derived carries it (CLAUDE.md conventions). Wraps at midnight."""
+        return self.fmt_time(minutes)[-5:]
+
 
 def aircraft_category(airline: str, distance_nm: float, cfg: Config) -> str:
     if airline in ("OO", "EV", "MQ"):
@@ -394,8 +398,10 @@ def derive(option: Option, world: World) -> Derived:
         overtime = max(0.0, line.on_block_min + min_turn - world.ground.shift_end_min)
         mct = world.cost("min_connection_time_min")
         missed = sum(b.pax for b in world.pilot.connections if line.on_block_min + mct > b.dep_min)
+    # A diverted aircraft never reaches a gate here, so it has no landing or on-block time at the destination
     return Derived(
-        landing_time=world.fmt_time(line.landing_min), on_block_time=world.fmt_time(line.on_block_min),
+        landing_time=None if line.diverted else world.fmt_clock(line.landing_min),
+        on_block_time=None if line.diverted else world.fmt_clock(line.on_block_min),
         fuel_margin_min=fuel_margin, crew_margin_min=safety.fdp_end_min - line.on_block_min,
         gate_overlap_min=overlap, ground_overtime_min=overtime, missed_pax=missed,
         wake_gap_waste_min=_wake_gap_waste(line, world),
