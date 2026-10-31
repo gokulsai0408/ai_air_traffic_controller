@@ -31,8 +31,9 @@ def summarise_negotiation(batch: pd.DataFrame) -> pd.DataFrame:
         rows.append({
             "agent_kind": kind, "scenarios": len(group), "crashed": len(group) - len(ok),
             **{f"{o.lower()}_rate": float(outcomes.get(o, 0.0)) for o in OUTCOMES},
-            "agreed_within_3_rounds_rate": float((ok["outcome"].isin(["CONSENSUS", "COMPROMISE"])
-                                                  & (ok["rounds_used"] <= 3)).mean()),
+            "max_rounds": int(ok["max_rounds"].max()) if len(ok) else 0,
+            "agreed_within_limit_rate": float((ok["outcome"].isin(["CONSENSUS", "COMPROMISE"])
+                                               & (ok["rounds_used"] <= ok["max_rounds"])).mean()),
             "unsafe_accepted": int(ok["unsafe_accepted"].fillna(False).astype(bool).sum()),
             "guardrail_overrides": int(ok["guardrail_overrides"].sum()),
             "median_latency_s": float(ok["latency_s"].median()),
@@ -103,8 +104,12 @@ def _hbars(ax, labels, values, fmt="{:,.0f}") -> None:
 
 
 def chart_rounds(batch, out, stub) -> None:
-    fig, ax = _axes("Rounds used per scenario (measured)", stub)
-    counts = batch["rounds_used"].dropna().astype(int).value_counts().reindex([1, 2, 3], fill_value=0)
+    limit = int(batch["max_rounds"].max())
+    fig, ax = _axes(f"Rounds used per scenario, limit {limit} (measured)", stub)
+    used = batch["rounds_used"].dropna().astype(int)
+    # Runs past the limit stay on the chart, because hiding them would hide a coordinator bug.
+    top = max(limit, int(used.max()) if len(used) else limit)
+    counts = used.value_counts().reindex(range(1, top + 1), fill_value=0)
     ax.bar([str(i) for i in counts.index], counts.values, color=BLUE, width=0.55)
     ax.yaxis.grid(True, color=GRID, linewidth=0.8)
     for i, value in enumerate(counts.values):

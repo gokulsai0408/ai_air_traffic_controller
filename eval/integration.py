@@ -8,8 +8,7 @@ When A, B and C land, any mismatch should need a change here and nowhere else:
   * ledger: Ledger(flight_key, seed, cfg_hash)
   * attacks: cdm.agents.adversarial.attacks(world) -> list of dicts (see eval/redteam.py)
   * LLM: cdm.agents.llm.complete(system, user, json_schema) -> raw text
-  * ledger entries: SCENARIO, BASELINE {do_nothing, fallback}, KERNEL {option_id: report dict},
-    VOTES [vote dicts], DECISION, ESCALATION, GUARDRAIL_OVERRIDE, LLM_CALL
+  * ledger entries: as C's coordinator writes them, plus LLM_CALL for each LLM call (not landed yet)
 """
 from __future__ import annotations
 
@@ -59,7 +58,7 @@ def use_pipeline(allow_stubs: bool) -> bool:
         return False
     if not allow_stubs:
         raise RuntimeError(f"Pipeline modules not landed yet: {', '.join(missing)}")
-    from tests.stubs.contract import install
+    from eval.stubs.contract import install
     install()
     return True
 
@@ -104,7 +103,8 @@ def load_cfg(config_dir: Path = ROOT / "config") -> Cfg:
     def read(name: str) -> dict:
         path = config_dir / f"{name}.yaml"
         return (yaml.safe_load(path.read_text(encoding="utf-8")) or {}) if path.exists() else {}
-    return Cfg(synthetic=read("synthetic"), costs=read("costs"), constraints=read("constraints"))
+    return Cfg(max_rounds=int(read("protocol").get("max_rounds", 3)), synthetic=read("synthetic"),
+               costs=read("costs"), constraints=read("constraints"))
 
 
 def flight_key(row: pd.Series) -> str:

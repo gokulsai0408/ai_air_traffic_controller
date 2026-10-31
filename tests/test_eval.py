@@ -148,6 +148,34 @@ def test_all_escalated_batch_does_not_crash_sensitivity():
     assert pd.isna(sensitivity.beats_fcfs_rate(empty))
 
 
+def test_max_rounds_flows_from_config_to_report(tmp_path, rows):
+    (tmp_path / "protocol.yaml").write_text("max_rounds: 2\n")
+    assert integration.load_cfg(tmp_path).max_rounds == 2
+    assert integration.load_cfg(tmp_path / "absent").max_rounds == 3
+    batch = run_batch(rows.head(8), "rule", integration.load_cfg(tmp_path))
+    assert set(batch["max_rounds"]) == {2}
+    assert (batch["rounds_used"] <= 2).all()
+    table = report.summarise_negotiation(batch)
+    assert table.loc[0, "max_rounds"] == 2
+    assert "agreed_within_limit_rate" in table
+    report.chart_rounds(batch, tmp_path, True)
+    assert (tmp_path / "rounds_histogram.png").exists()
+
+
+def test_ground_drafts_count_as_agent_options_and_seeds_do_not(tmp_path):
+    from eval.run_batch import summarise_ledger
+    def report(oid, safe):
+        status = "PASS" if safe else "FAIL"
+        return {"option_id": oid, "safe": safe, "results": [{"id": "C-REF-01", "status": status}]}
+    entry = {"type": "KERNEL", "payload": {"round": 1, "reports": [
+        report("G-017", True), report("G-1-01", False), report("P-1-01", False), report("A-2-01", True)]}}
+    path = tmp_path / "run.jsonl"
+    path.write_text(json.dumps(entry) + "\n")
+    summary = summarise_ledger(path)
+    assert (summary["agent_options"], summary["agent_options_unsafe"]) == (3, 2)
+    assert summary["kernel_entries_unparsed"] == 0
+
+
 def test_report_builds_and_marks_stub_results(tmp_path, batch):
     write_results(batch, "batch_rule", (STUB_NOTE,), tmp_path)
     skipped = report.build_report(tmp_path)

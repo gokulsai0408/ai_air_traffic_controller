@@ -80,12 +80,13 @@ def tamper_copy(path: Path) -> Path:
 
 
 def badge_row(report: dict) -> None:
-    badges = []
+    badges, sources = [], []
     for result in report.get("results", []):
         icon = "✅" if result["status"] == "PASS" else "❌"
         margin = "" if result.get("margin") is None else f" ({result['margin']:.1f}{result.get('unit', '')})"
         badges.append(f"{icon} `{result['id']}`{margin}")
-    st.markdown(" · ".join(badges) or "No checks recorded")
+        sources.append(f"{result['id']}: {result.get('source') or 'no source'} [{result.get('tag', '')}]")
+    st.markdown(" · ".join(badges) or "No checks recorded", help="\n\n".join(sources) or None)
 
 
 @st.cache_data(show_spinner="Loading flights")
@@ -131,7 +132,7 @@ def scenario_picker(can_run: bool) -> None:
 def problem_panel(entries: list[dict]) -> None:
     scenario = first_of(entries, "SCENARIO")
     if scenario:
-        public = scenario["payload"]
+        public = scenario["payload"].get("public") or {}
         left, right = st.columns(2)
         left.markdown("**Flight data** :green-badge[REAL]")
         left.table(pd.DataFrame({"value": {k: str(public[k]) for k in REAL_FIELDS if k in public}}))
@@ -140,19 +141,23 @@ def problem_panel(entries: list[dict]) -> None:
     baseline = first_of(entries, "BASELINE")
     if baseline:
         for name, title in (("do_nothing", "Do-nothing plan"), ("fallback", "Fallback plan")):
-            report = baseline["payload"].get(name)
+            report = (baseline["payload"].get(name) or {}).get("kernel")
             if isinstance(report, dict):
                 st.markdown(f"**{title}:** {'safe' if report.get('safe') else 'UNSAFE'}")
                 badge_row(report)
 
 
 def timeline_panel(entries: list[dict]) -> None:
-    kernel = last_of(entries, "KERNEL")
-    reports = kernel["payload"] if kernel and isinstance(kernel["payload"], dict) else {}
+    # Later rounds only log new options, so reports accumulate across KERNEL entries.
+    reports = {r["option_id"]: r for e in entries if e["type"] == "KERNEL" for r in e["payload"].get("reports", [])}
     vote_entries = [e for e in entries if e["type"] == "VOTES"]
     if not vote_entries:
-        st.info("No vote took place. The kernel found nothing to vote on.")
-    votes = [v for e in vote_entries for v in e["payload"]]
+        st.info("No votes on record: the kernel left nothing to vote on, or the final round was binding.")
+    votes = [v for e in vote_entries for v in e["payload"]["votes"]]
+    assessments = {}
+    for entry in entries:
+        if entry["type"] == "ASSESSMENTS":
+            assessments[entry["payload"]["round"]] = entry["payload"]["assessments"]
     for round_number in sorted({v["round"] for v in votes}):
         st.markdown(f"#### Round {round_number}")
         in_round = [v for v in votes if v["round"] == round_number]
@@ -165,7 +170,9 @@ def timeline_panel(entries: list[dict]) -> None:
                 option_votes = [v for v in in_round if v["option_id"] == option_id]
                 for column, vote in zip(columns, option_votes):
                     mark = "✅" if vote["vote"] == "ACCEPT" else "❌"
-                    column.markdown(f"{mark} **{vote['agent']}** `{vote['reason']}`")
+                    own = assessments.get(round_number, {}).get(vote["agent"], {}).get(option_id, {})
+                    cost = f" · ${own['cost_usd']:,.0f}" if "cost_usd" in own else ""
+                    column.markdown(f"{mark} **{vote['agent']}** `{vote['reason']}`{cost}")
                     if vote.get("rationale"):
                         column.caption(vote["rationale"])
 
@@ -173,21 +180,24 @@ def timeline_panel(entries: list[dict]) -> None:
 def decision_panel(entries: list[dict], path: Path, writable: bool) -> None:
     decision, escalation = last_of(entries, "DECISION"), last_of(entries, "ESCALATION")
     human = last_of(entries, "HUMAN_ACTION")
-    if decision:
-        payload = decision["payload"]
-        st.subheader(f"Outcome: {payload.get('outcome', 'UNKNOWN')}")
-        st.json(payload.get("option", {}), expanded=True)
-        if payload.get("costs_by_agent"):
-            rows = {role: {"plan cost (USD, ASSUMED constants)": cost,
-                           "walk-away (USD)": payload.get("walkaway", {}).get(role)}
-                    for role, cost in payload["costs_by_agent"].items()}
-            st.table(pd.DataFrame(rows).T)
     if escalation:
         payload = escalation["payload"]
         st.subheader(f"Outcome: ESCALATED ({payload.get('kind', '')})")
         st.error(payload.get("required_human_decision", ""))
         if payload.get("blocking_constraints"):
             st.markdown("Blocking: " + ", ".join(f"`{c}`" for c in payload["blocking_constraints"]))
+    if decision:
+        payload = decision["payload"]
+        if not escalation:
+            st.subheader(f"Outcome: {payload.get('outcome', 'UNKNOWN')} in round {payload.get('rounds_used', '?')}")
+        if payload.get("option"):
+            st.json(payload["option"], expanded=True)
+        if payload.get("costs_by_agent"):
+            walkaway_entry = last_of(entries, "WALKAWAY")
+            walkaway = walkaway_entry["payload"] if walkaway_entry else {}
+            rows = {role: {"plan cost (USD, ASSUMED constants)": cost, "walk-away (USD)": walkaway.get(role)}
+                    for role, cost in payload["costs_by_agent"].items()}
+            st.table(pd.DataFrame(rows).T)
     if human:
         st.success(f"Duty manager action on record: {human['payload']['action']}")
     elif not writable:

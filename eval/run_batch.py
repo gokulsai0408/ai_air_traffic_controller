@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import tempfile
 import time
 from collections import Counter
@@ -19,6 +20,7 @@ from eval import integration
 from eval.results import STUB_NOTE, write_results
 from eval.sample import sample_rows
 
+AGENT_OPTION_ID = re.compile(r"^[PGA]-\d+-\d+$")  # seed options are G-017, ground drafts G-2-03
 REQUIRED_COLUMNS = [
     "outcome", "rounds_used", "unsafe_accepted", "price_of_privacy_usd", "central_bound_ok",
     *(f"{p}_{m}" for p in ("neg", "dn", "fb", "cs") for m in (
@@ -67,7 +69,7 @@ def plan_metrics(prefix: str, option, world, row: pd.Series) -> dict:
 
 
 def summarise_ledger(path: Path) -> dict:
-    """Count what a saved ledger shows. KERNEL payloads must be {option_id: report dict}."""
+    """Count what a saved ledger shows. KERNEL payloads are {"round": n, "reports": [report dict]}."""
     latest: dict[str, dict] = {}
     types: Counter = Counter()
     unparsed = 0
@@ -76,12 +78,13 @@ def summarise_ledger(path: Path) -> dict:
             entry = json.loads(line)
             types[entry["type"]] += 1
             if entry["type"] == "KERNEL":
-                payload = entry["payload"]
-                if isinstance(payload, dict) and all(isinstance(v, dict) for v in payload.values()):
-                    latest.update(payload)
+                reports = entry["payload"].get("reports") if isinstance(entry["payload"], dict) else None
+                if isinstance(reports, list):
+                    latest.update({report["option_id"]: report for report in reports})
                 else:
                     unparsed += 1
-    proposed = {k: v for k, v in latest.items() if not k.startswith("G-")}
+    # A draft that repeats a seed option keeps the seed's ID, so it counts as a seed here.
+    proposed = {k: v for k, v in latest.items() if AGENT_OPTION_ID.match(k)}
     failures: Counter = Counter(
         result["id"] for report in proposed.values()
         for result in report["results"] if result["status"] == "FAIL"
@@ -91,6 +94,8 @@ def summarise_ledger(path: Path) -> dict:
         "agent_options": len(proposed),
         "agent_options_unsafe": sum(not r["safe"] for r in proposed.values()),
         "agent_failures_by_constraint": json.dumps(dict(sorted(failures.items()))),
+        "drafts_rejected_malformed": types["DRAFT_REJECTED"],
+        "agent_errors": types["AGENT_ERROR"],
         "guardrail_overrides": types["GUARDRAIL_OVERRIDE"],
         "llm_calls": types["LLM_CALL"],
         "kernel_entries_unparsed": unparsed,
@@ -109,7 +114,7 @@ def run_scenario(row: pd.Series, seed: int, agent_kind: str, cfg, ledger_dir: Pa
 
     key = integration.flight_key(row)
     record = {
-        "flight_key": key, "seed": seed, "agent_kind": agent_kind,
+        "flight_key": key, "seed": seed, "agent_kind": agent_kind, "max_rounds": cfg.max_rounds,
         "airport": row["DESTINATION_AIRPORT"], "stratum": row.get("stratum", ""),
         "tail": row["TAIL_NUMBER"], "month": int(row["MONTH"]), "day": int(row["DAY"]),
         "flight": int(row["FLIGHT_NUMBER"]), "recorded_arrival_delay": float(row["ARRIVAL_DELAY"]),

@@ -1,8 +1,13 @@
 """Part D tests run on the stubs until the real pipeline lands, then on the real thing."""
+import sys
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
-from eval import integration
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # so bare `pytest` finds eval/ and cdm/
+
+from eval import integration  # noqa: E402
 
 integration.use_pipeline(allow_stubs=True)
 

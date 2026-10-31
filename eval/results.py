@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
-STUB_NOTE = "STUB PIPELINE: placeholder numbers from tests/stubs. Never cite these."
+STUB_NOTE = "STUB PIPELINE: placeholder numbers from eval/stubs. Never cite these."
 
 
 def write_results(df: pd.DataFrame, name: str, notes: tuple[str, ...] = (),

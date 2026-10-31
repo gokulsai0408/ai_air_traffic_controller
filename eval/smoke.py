@@ -36,9 +36,13 @@ def main() -> int:
     sample = sample_rows(flights, 10, seed=2015)
     print(f"[ok] sample: {len(sample)} rows")
 
-    stubbed = integration.use_pipeline(allow_stubs=not args.strict)
+    missing = integration.missing_modules()
+    if args.strict and missing:
+        print(f"[FAIL] --strict: not landed yet: {', '.join(missing)}")
+        return 1
+    stubbed = integration.use_pipeline(allow_stubs=True)
     if stubbed:
-        print(f"[STUB] pipeline not landed, using stubs for: {', '.join(integration.PIPELINE_MODULES)}")
+        print(f"[STUB] not landed, using stubs for: {', '.join(missing)}")
     with tempfile.TemporaryDirectory() as tmp:
         record = run_scenario(sample.iloc[0], 0, "rule", integration.load_cfg(), Path(tmp))
     if record["unsafe_accepted"]:

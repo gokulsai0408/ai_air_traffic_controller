@@ -15,8 +15,12 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from eval.integration import ROLES, flight_key
-from tests.stubs import schemas_copy as S
+from eval.integration import ROOT, flight_key
+
+if (ROOT / "cdm" / "schemas.py").exists():
+    import cdm.schemas as S
+else:
+    from eval.stubs import schemas_copy as S
 
 SLOT_PREFIX = "S-"
 REMOTE = "REMOTE-1"
@@ -223,9 +227,9 @@ class RuleAgent:
 
     def vote(self, view: dict) -> list[S.Vote]:
         votes = []
-        for oid, cost in view["my_costs"].items():
-            accept = cost <= view["walkaway"]
-            votes.append(S.Vote(agent=self.role, round=view["round"], option_id=oid,
+        for assessment in view["own_assessments"]:
+            accept = assessment.cost_usd <= view["walkaway_usd"]
+            votes.append(S.Vote(agent=self.role, round=view["round"], option_id=assessment.option_id,
                                 vote="ACCEPT" if accept else "REJECT",
                                 reason=S.Reason.ACCEPTABLE if accept else S.Reason.COST_ABOVE_WALKAWAY))
         return votes
@@ -257,23 +261,33 @@ def attacks(world) -> list[dict]:
 
 
 def negotiate(world, agents, cfg, ledger) -> S.Decision:
-    """Section 5.6, cut down. The real one is C's cdm/coordinator.py."""
-    ledger.append("SCENARIO", "coordinator", world.public)
-    fb = fallback_plan(world)
+    """Section 5.6, cut down, logging the same entries as C's cdm/coordinator.py. Used until C merges."""
+    ledger.append("SCENARIO", "coordinator", {"flight_key": world.flight_key, "public": world.public,
+                                              "max_rounds": cfg.max_rounds})
+    dn, fb = do_nothing(world), fallback_plan(world)
     ledger.append("BASELINE", "coordinator", {
-        "do_nothing": check(do_nothing(world), world).model_dump(mode="json"),
-        "fallback": check(fb, world).model_dump(mode="json")})
+        "do_nothing": {"option": dn.model_dump(mode="json"), "kernel": check(dn, world).model_dump(mode="json")},
+        "fallback": {"option": fb.model_dump(mode="json"), "kernel": check(fb, world).model_dump(mode="json")}})
     walkaway = {a.role: a.assess(fb, world).cost_usd for a in agents}
+    ledger.append("WALKAWAY", "coordinator", walkaway)
     pool = seed_options(world)
-    views = {"menus": world.menus, "round": 1}
     for agent in agents:
-        for i, draft in enumerate(agent.propose(views)):
+        for i, draft in enumerate(agent.propose({"menus": world.menus, "round": 1}), 1):
             pool.append(S.Option(**draft.model_dump(), option_id=f"{agent.role[0].upper()}-1-{i:02d}",
                                  round=1, proposed_by=agent.role))
     reports = {o.option_id: check(o, world) for o in pool}
-    ledger.append("KERNEL", "kernel", {k: v.model_dump(mode="json") for k, v in reports.items()})
+    ledger.append("KERNEL", "kernel", {"round": 1, "reports": [r.model_dump(mode="json") for r in reports.values()]})
     feasible = [o for o in pool if reports[o.option_id].safe and reports[o.option_id].policy_ok]
-    if not feasible:
+
+    def finish(option, outcome, rounds, escalation=None, votes=()):
+        report = check(option, world) if option else None
+        per_agent = {a.role: a.assess(option, world).cost_usd for a in agents} if option else {}
+        decision = S.Decision(outcome=outcome, option=option, kernel=report, rounds_used=rounds, votes=list(votes),
+                              escalation=escalation, costs_by_agent=per_agent)
+        ledger.append("DECISION", "coordinator", decision.model_dump(mode="json"))
+        return decision
+
+    def escalate(rounds, votes=()):
         relaxable = [o for o in pool if reports[o.option_id].safe]
         if relaxable:
             esc = S.Escalation(kind="POLICY_RELAXATION", relaxed_constraint_id="C-POL-OT-01",
@@ -283,28 +297,26 @@ def negotiate(world, agents, cfg, ledger) -> S.Decision:
             esc = S.Escalation(kind="DECLINE", blocking_constraints=["C-FUEL-01"],
                                required_human_decision="STUB: no safe plan. PIC and controller decision required.")
         ledger.append("ESCALATION", "coordinator", esc.model_dump())
-        return S.Decision(outcome="ESCALATED", option=None, kernel=None, rounds_used=1, escalation=esc)
-    costs = {o.option_id: {a.role: a.assess(o, world).cost_usd for a in agents} for o in feasible}
-    shortlist = sorted(feasible, key=lambda o: sum(costs[o.option_id].values()))[:6]
+        return finish(relaxable[0] if relaxable else None, "ESCALATED", rounds, esc, votes)
+
+    if not feasible:
+        return escalate(1)
+    assess = {a.role: {o.option_id: a.assess(o, world) for o in feasible} for a in agents}
+    ledger.append("ASSESSMENTS", "coordinator", {"round": 1, "assessments": {
+        role: {oid: a.model_dump(mode="json") for oid, a in items.items()} for role, items in assess.items()}})
+    shortlist = sorted(feasible, key=lambda o: sum(assess[r][o.option_id].cost_usd for r in assess))[:6]
     votes: list[S.Vote] = []
     for agent in agents:
-        votes += agent.vote({"round": 1, "walkaway": walkaway[agent.role],
-                             "my_costs": {o.option_id: costs[o.option_id][agent.role] for o in shortlist}})
-    ledger.append("VOTES", "coordinator", [v.model_dump(mode="json") for v in votes])
-    unanimous = [o for o in shortlist
-                 if all(v.vote == "ACCEPT" for v in votes if v.option_id == o.option_id)]
-    best, outcome = (unanimous[0], "CONSENSUS") if unanimous else (fb, "FALLBACK")
-    report = check(best, world)
-    if not report.safe:
-        esc = S.Escalation(kind="DECLINE", required_human_decision="STUB: fallback unsafe. Human decision required.",
-                           blocking_constraints=[r.id for r in report.results if r.status == "FAIL"])
-        ledger.append("ESCALATION", "coordinator", esc.model_dump())
-        return S.Decision(outcome="ESCALATED", option=None, kernel=None, rounds_used=2, escalation=esc, votes=votes)
-    per_agent = {a.role: a.assess(best, world).cost_usd for a in agents}
-    ledger.append("DECISION", "coordinator", {"outcome": outcome, "option": best.model_dump(mode="json"),
-                                              "costs_by_agent": per_agent, "walkaway": walkaway})
-    return S.Decision(outcome=outcome, option=best, kernel=report, rounds_used=2 if outcome == "CONSENSUS" else 3,
-                      votes=votes, costs_by_agent=per_agent)
+        votes += agent.vote({"round": 1, "walkaway_usd": walkaway[agent.role],
+                             "own_assessments": [assess[agent.role][o.option_id] for o in shortlist]})
+    ledger.append("VOTES", "coordinator", {"round": 1, "votes": [v.model_dump(mode="json") for v in votes]})
+    unanimous = [o for o in shortlist if all(v.vote == "ACCEPT" for v in votes if v.option_id == o.option_id)]
+    if unanimous:
+        return finish(unanimous[0], "CONSENSUS", 1, votes=votes)
+    fb_report = check(fb, world)
+    if fb_report.safe and fb_report.policy_ok:
+        return finish(fb, "FALLBACK", cfg.max_rounds, votes=votes)
+    return escalate(cfg.max_rounds, votes)
 
 
 _EXPORTS = {
@@ -324,9 +336,14 @@ _EXPORTS = {
 
 
 def install() -> None:
-    """All or nothing: a real kernel judging a stub world would mean nothing."""
-    sys.modules["cdm.schemas"] = S
+    """Stubs only what has not landed. A real kernel with a stub world would mean nothing, so once
+    A or B land, their modules must land together or stay stubbed; C's code works with either."""
+    if S.__name__.startswith("eval.stubs"):
+        sys.modules["cdm.schemas"] = S
     for name, attrs in _EXPORTS.items():
+        base = ROOT.joinpath(*name.split("."))
+        if base.with_suffix(".py").exists() or (base / "__init__.py").exists():
+            continue
         module = types.ModuleType(name)
         module.__dict__.update(attrs)
         sys.modules[name] = module

@@ -1,11 +1,31 @@
 # Multi-agent disruption negotiation
 
-Airbus Challenge #2, Autonomous SG 2026. A real delayed flight becomes a live disruption. ATC, Pilot and Ground agents negotiate a fix in at most 3 rounds. Code checks legality and does the maths, LLMs propose and explain, and a human duty manager approves. The full design is in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
+Airbus Challenge #2, Autonomous SG 2026. A real delayed flight becomes a live disruption. ATC, Pilot and Ground agents negotiate a fix within a hard round limit (`max_rounds` in `config/protocol.yaml`, currently 3). Code checks legality and does the maths, LLMs propose and explain, and a human duty manager approves. The full design is in [docs/BUILD_PLAN.md](docs/BUILD_PLAN.md).
 
 ## Run it
 
+Use a virtual environment. A bare `pip` can belong to a different Python from `python` (Miniconda, say), which installs packages where `python` can't import them. That's why every install below is `python -m pip`.
+
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+```
+
+On Windows PowerShell, activate it with:
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+On macOS or Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+Then install and run:
+
+```bash
+python -m pip install -r requirements.txt
 ```
 
 ```bash
@@ -17,7 +37,7 @@ streamlit run app/dashboard.py
 ```
 
 ```bash
-pytest -q
+python -m pytest -q
 ```
 
 ## Reproduce the evaluation
@@ -54,7 +74,7 @@ Outputs go to `eval/results/`. Every table labels its numbers measured, modelled
 
 ## Part D status
 
-Until A, B and C land, `--allow-stubs` runs the harness on `tests/stubs/contract.py`. Those numbers are placeholders, and the CSVs, charts and dashboard all say STUB. `eval/integration.py` holds every assumption Part D makes beyond the frozen contracts.
+Until A, B and C land, `--allow-stubs` runs the harness on `eval/stubs/contract.py`. Those numbers are placeholders, and the CSVs, charts and dashboard all say STUB. `eval/integration.py` holds every assumption Part D makes beyond the frozen contracts.
 
 ## Data notes and limitations
 
