@@ -1,0 +1,19 @@
+# Owner: Person A. USD-equivalent. Every value has a source and a tag.
+# REAL = taken from a cited figure. ASSUMED_CONST = team estimate, tested in E6 sensitivity.
+# Year mismatch: delay cost is 2024 USD, fuel is Oct 2015 USD (the year of the flights).
+cost_per_delay_min:    { value: 67.70, tag: REAL, source: "A4A U.S. Passenger Carrier Delay Costs, 2024: $100.76/block min minus $33.06 fuel, because hold fuel is costed separately" }
+fuel_price_usd_per_kg: { value: 0.54,  tag: REAL, source: "BTS domestic scheduled jet fuel, Oct 2015: $1.63/gal; converted at 3.04 kg/gal (assumed density)" }
+cost_per_missed_pax:   { value: 250,   tag: ASSUMED_CONST, source: "Team estimate" }
+divert_fixed:          { value: 15000, tag: ASSUMED_CONST, source: "Team estimate" }
+turbulence_hold_penalty_per_min: { value: 20, tag: ASSUMED_CONST, source: "Team estimate" }
+gate_change_fixed:     { value: 300,  tag: ASSUMED_CONST, source: "Team estimate" }
+remote_stand_cost:     { value: 1200, tag: ASSUMED_CONST, source: "Team estimate (buses, pax time)" }
+overtime_rate_per_min: { value: 15,   tag: ASSUMED_CONST, source: "Team estimate" }
+turn_penalty_per_min:  { value: 40,   tag: ASSUMED_CONST, source: "Team estimate" }
+holding_workload_per_min: { value: 25, tag: ASSUMED_CONST, source: "Team estimate" }
+stack_congestion_per_aircraft: { value: 5, tag: ASSUMED_CONST, source: "Team estimate; per aircraft landing in the 10 min before our slot" }
+runway_minute_value:   { value: 60,   tag: ASSUMED_CONST, source: "Team estimate" }
+divert_coordination_cost: { value: 800, tag: ASSUMED_CONST, source: "Team estimate" }
+holding_flow_kg_per_min: { regional: 25, narrowbody: 40, widebody: 90, tag: ASSUMED_CONST, source: "Plan section 5.4" }
+min_turn_min:            { regional: 25, narrowbody: 35, widebody: 60, tag: ASSUMED_CONST, source: "Plan section 5.4" }
+min_connection_time_min: { value: 45, tag: ASSUMED_CONST, source: "Plan section 13" }

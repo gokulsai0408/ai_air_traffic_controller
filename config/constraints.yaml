@@ -1,0 +1,77 @@
+# Owner: Person B. Safety thresholds live ONLY here; no text channel may modify them.
+C-SCHEMA-01:
+  class: PHYSICAL
+  description: Message validates against schema; fields consistent with action_type
+  params: {}
+  source: "Design"
+  tag: ASSUMED_CONST
+C-REF-01:
+  class: PHYSICAL
+  description: slot_id / gate_id / divert_to exist in the menus
+  params: {}
+  source: "Design"
+  tag: ASSUMED_CONST
+C-CONSIST-01:
+  class: PHYSICAL
+  description: hold_minutes == max(0, slot_time - ETA) within tolerance
+  params: { tolerance_min: 1 }
+  source: "Design"
+  tag: ASSUMED_CONST
+C-RWY-01:
+  class: SAFETY
+  description: Slot is free and within the arrival-rate grid
+  params: {}
+  source: "ATC procedure (simplified); arrival rate ASSUMED"
+  tag: ASSUMED_CONST
+C-WAKE-01:
+  class: SAFETY
+  description: Gap to leader and follower >= wake minimum
+  params:
+    approach_speed_kt: 140
+    # (leader, follower) -> NM; default 3 NM
+    pairs_nm: { "H-H": 4, "H-M": 5, "H-L": 6, "M-L": 5, "J-H": 6, "J-M": 7, "J-L": 8 }
+    default_nm: 3
+  source: "ICAO Doc 4444 (simplified), converted at 140 kt (ASSUMED)"
+  tag: REAL
+C-FUEL-01:
+  class: SAFETY
+  description: Fuel at landing >= final reserve + alternate
+  params: { final_reserve_min: 45 }
+  source: "FAA 14 CFR 121.639 (domestic); ICAO Annex 6 uses 30 min"
+  tag: REAL   # the rule is real; the aircraft's fuel state is SYNTHETIC
+C-FUEL-02:
+  class: SAFETY
+  description: For DIVERT, fuel above final reserve >= time to alternate (+ hold so far)
+  params: {}
+  source: "FAA 14 CFR 121.639"
+  tag: REAL
+C-CREW-01:
+  class: SAFETY
+  description: On-block time <= crew FDP end
+  params: {}
+  source: "FAA 14 CFR Part 117 (FDP end is SYNTHETIC)"
+  tag: REAL
+C-GATE-01:
+  class: PHYSICAL
+  description: Gate size class >= aircraft class
+  params: {}
+  source: "Design (classes ASSUMED)"
+  tag: ASSUMED_CONST
+C-GATE-02:
+  class: PHYSICAL
+  description: No overlap with other gate occupancy (with buffer)
+  params: { buffer_min: 10 }
+  source: "ASSUMED buffer"
+  tag: ASSUMED_CONST
+C-TAXI-01:
+  class: PHYSICAL
+  description: Gate reachable given taxiway closures parsed from ops notes (tighten-only)
+  params: {}
+  source: "Ops notes"
+  tag: SYNTHETIC
+C-POL-OT-01:
+  class: POLICY
+  description: Ground overtime <= cap
+  params: { max_overtime_min: 15 }
+  source: "Assumed company policy"
+  tag: ASSUMED_CONST
