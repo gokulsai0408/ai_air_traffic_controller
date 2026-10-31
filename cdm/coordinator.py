@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Optional
@@ -157,6 +158,7 @@ class _Negotiation:
             raise ValueError("max_rounds must be >= 1")
         self.cap = int(_get(cfg, "shortlist_cap", DEFAULT_SHORTLIST_CAP))
         self.max_drafts = int(_get(cfg, "max_drafts_per_agent", DEFAULT_MAX_DRAFTS_PER_AGENT))
+        self.parallel = bool(_get(cfg, "parallel_agents", True))
         self.cfg_hash = _get(cfg, "hash")
         self.pool: dict[str, Option] = {}
         self.by_plan: dict[tuple, str] = {}
@@ -206,14 +208,33 @@ class _Negotiation:
         if oid not in self.drafted:
             self.drafted.append(oid)
 
-    def safe_call(self, role: str, what: str, fn: Callable, *args: Any) -> Any:
-        try:
-            return fn(*args)
-        except Exception as e:   # an agent failure must never stop the protocol
-            self.log("AGENT_ERROR", "coordinator", {"agent": role, "call": what, "error": repr(e)[:500]})
-            return None
-        finally:
+    def call_agents(self, what: str, calls: dict[str, Callable[[], Any]]) -> dict[str, Any]:
+        """Run one step for every agent. The agents are independent (separate LLM calls, no shared state),
+        so they run concurrently; results, errors and LLM_CALL entries are logged afterwards in fixed role
+        order so the ledger is identical whatever order the calls finish in."""
+        def guarded(fn: Callable[[], Any]) -> tuple[Any, Optional[Exception]]:
+            try:
+                return fn(), None
+            except Exception as e:   # an agent failure must never stop the protocol
+                return None, e
+
+        if self.parallel and len(calls) > 1:
+            with ThreadPoolExecutor(max_workers=len(calls)) as pool:
+                futures = {role: pool.submit(guarded, fn) for role, fn in calls.items()}
+                outcomes = {role: f.result() for role, f in futures.items()}
+        else:
+            outcomes = {role: guarded(fn) for role, fn in calls.items()}
+
+        results: dict[str, Any] = {}
+        for role in ROLES:
+            if role not in outcomes:
+                continue
+            result, error = outcomes[role]
             self.drain_agent_events(role)
+            if error is not None:
+                self.log("AGENT_ERROR", "coordinator", {"agent": role, "call": what, "error": repr(error)[:500]})
+            results[role] = result
+        return results
 
     def drain_agent_events(self, role: str) -> None:
         """LLM agents record every prompt/response; only whitelisted entry types reach the ledger."""
@@ -231,8 +252,9 @@ class _Negotiation:
             "agents": {r: type(a).__name__ for r, a in self.agents.items()}})
 
         notes = _ops_notes(w)
-        for role, a in self.agents.items():
-            facts = self.safe_call(role, "read_ops", a.read_ops, notes)
+        read = self.call_agents("read_ops", {r: (lambda a=a: a.read_ops(notes)) for r, a in self.agents.items()})
+        for role in ROLES:
+            facts = read[role]
             if not isinstance(facts, OpsFacts):
                 facts = OpsFacts(uncertain=True)
             self.log("OPS_FACTS", role, facts)
@@ -257,12 +279,13 @@ class _Negotiation:
                 for o in list(self.pool.values()):
                     self.kcheck(o)
                 candidates = [o for o in self.pool.values() if self.ok(o.option_id)]
-                for role, a in self.agents.items():
-                    own = [a.assess(o, w) for o in candidates]
-                    view = view_for(a, w, rnd, candidates=candidates, own=own, walkaway_usd=self.walkaway[role],
-                                    shortlist=[], other_votes=[])
-                    drafts = self.safe_call(role, "propose", a.propose, view) or []
-                    drafts = list(drafts)[:self.max_drafts]
+                views = {role: view_for(a, w, rnd, candidates=candidates, own=[a.assess(o, w) for o in candidates],
+                                        walkaway_usd=self.walkaway[role], shortlist=[], other_votes=[])
+                         for role, a in self.agents.items()}
+                proposed = self.call_agents("propose", {r: (lambda a=a, v=views[r]: a.propose(v))
+                                                        for r, a in self.agents.items()})
+                for role in ROLES:
+                    drafts = list(proposed[role] or [])[:self.max_drafts]
                     self.log("PROPOSALS", role, {"round": rnd, "drafts": drafts})
                     for d in drafts:
                         self.add_draft(d, role, rnd)
@@ -326,10 +349,13 @@ class _Negotiation:
                       assess: dict[str, dict[str, Assessment]], last_votes: list[Vote]) -> list[Vote]:
         listed = {o.option_id for o in shortlist}
         out: list[Vote] = []
-        for role, a in self.agents.items():
-            view = view_for(a, self.world, rnd, candidates=feasible, own=[assess[role][o.option_id] for o in shortlist],
-                            walkaway_usd=self.walkaway[role], shortlist=shortlist, other_votes=last_votes)
-            raw = self.safe_call(role, "vote", a.vote, view)
+        views = {role: view_for(a, self.world, rnd, candidates=feasible,
+                                own=[assess[role][o.option_id] for o in shortlist], walkaway_usd=self.walkaway[role],
+                                shortlist=shortlist, other_votes=last_votes)
+                 for role, a in self.agents.items()}
+        ballots = self.call_agents("vote", {r: (lambda a=a, v=views[r]: a.vote(v)) for r, a in self.agents.items()})
+        for role in ROLES:
+            raw = ballots[role]
             seen: set[str] = set()
             for rv in raw or []:
                 try:

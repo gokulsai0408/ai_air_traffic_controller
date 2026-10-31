@@ -171,3 +171,33 @@ def test_auth_error_is_not_retried_and_switches_to_rule_immediately():
     assert all(c.calls == ["OpsFacts"] for c in clients.values())               # one call per agent, no retry
     assert len(entries(ledger, "AGENT_FALLBACK")) == 3
     assert d.outcome == "CONSENSUS" and d.kernel.safe
+
+
+def test_parallel_agents_give_the_same_ledger_as_sequential_and_run_concurrently():
+    import time
+
+    class Slow(FakeLLM):
+        def __init__(self, delay):
+            super().__init__()
+            self.delay = delay
+
+        def __call__(self, system, user, schema):
+            time.sleep(self.delay)
+            return super().__call__(system, user, schema)
+
+    delays = {"pilot": 0.06, "ground": 0.03, "atc": 0.0}     # pilot finishes last, so finish order is reversed
+
+    def ledger_for(parallel):
+        clients = {r: Slow(delays[r]) for r in ROLES}
+        t0 = time.perf_counter()
+        d, ledger = run(FakeWorld(base_specs(), ops_notes="MOD TURB."), clients,
+                        {"max_rounds": 3, "parallel_agents": parallel})
+        for e in ledger.entries:
+            e["payload"].pop("latency_s", None) if isinstance(e["payload"], dict) else None
+        return d, ledger.entries, time.perf_counter() - t0
+
+    d_seq, seq, t_seq = ledger_for(False)
+    d_par, par, t_par = ledger_for(True)
+    assert d_seq == d_par and seq == par
+    assert [e["actor"] for e in par if e["type"] == "LLM_CALL"][:3] == list(ROLES)
+    assert t_par < t_seq * 0.75
