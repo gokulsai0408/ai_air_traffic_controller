@@ -1,7 +1,7 @@
 """Deterministic safety kernel (BUILD_PLAN 5.3).
 
 check() is pure: no I/O, randomness or LLM calls. constraints.yaml is read once at import.
-Reads only world.safety_view and derive(). Anything it cannot evaluate fails closed.
+Reads only world.safety_view (via view_of) and derive(). Anything it cannot evaluate fails closed.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from typing import Any, Optional
 import yaml
 from pydantic import ValidationError
 
-from cdm.safety_view import Gate, SafetyView, Slot
+from cdm.safety_view import Gate, SafetyView, Slot, view_of
 from cdm.schemas import ActionType, CClass, ConstraintResult, Derived, KernelReport, Option, OpsFacts
 
 CONSTRAINTS_PATH = Path(__file__).resolve().parents[1] / "config" / "constraints.yaml"
@@ -149,6 +149,10 @@ def _check_slot(opt: Option, slot: Slot, view: SafetyView) -> list[ConstraintRes
 
 def apply_facts(world: Any, facts: OpsFacts) -> Any:
     """A copy of world whose safety_view also holds these ops facts. Tighten-only: it only adds."""
+    if not isinstance(world.safety_view, SafetyView):
+        from cdm.world import apply_ops_facts   # A's worlds carry their own tighten-only version
+
+        return apply_ops_facts(world, facts)
     view: SafetyView = world.safety_view
     tightened = replace(
         view,
@@ -178,7 +182,7 @@ def _check_gate(gate: Gate, derived: Derived, view: SafetyView) -> list[Constrai
 
 def check(option: Any, world: Any) -> KernelReport:
     """Check one option. Ops facts reach it through apply_facts(), so they can only tighten."""
-    view: SafetyView = world.safety_view
+    view: SafetyView = view_of(world)
     raw_id = option.get("option_id") if isinstance(option, dict) else getattr(option, "option_id", None)
     option_id = str(raw_id) if raw_id else "UNKNOWN"
 

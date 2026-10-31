@@ -16,8 +16,8 @@ derive is only called on options that passed C-SCHEMA-01 and C-REF-01, so IDs re
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timedelta
+from typing import Any, Optional
 
 REMOTE_GATE_ID = "REMOTE-1"
 
@@ -44,6 +44,13 @@ class Alternate:
     minutes_to: float
 
 
+_EPOCH = datetime(2000, 1, 1)   # only differences between times matter to the kernel
+
+
+def _at(minutes: float) -> datetime:
+    return _EPOCH + timedelta(minutes=minutes)
+
+
 @dataclass(frozen=True)
 class SafetyView:
     eta: datetime
@@ -58,3 +65,31 @@ class SafetyView:
     extra_fuel_min: float           # holding fuel ABOVE final reserve + alternate, in minutes
     taxiway_closures: tuple[str, ...] = ()
     gates_unavailable: tuple[str, ...] = ()
+
+
+def view_of(world: Any) -> SafetyView:
+    """The kernel's view of a world, whichever form the world's safety_view takes.
+
+    A SafetyView is returned as is. Person A's cdm.world.SafetyView (times in minutes, sizes as
+    names) is converted. Nothing is added or dropped, except that a closure's end time is ignored:
+    a closed taxiway counts as closed for the whole scenario, which can only tighten the result.
+    """
+    raw = world.safety_view
+    if isinstance(raw, SafetyView):
+        return raw
+    from cdm.world import SIZE_RANK   # A's module; imported late so B's code loads without it
+
+    slots = tuple(Slot(s.slot_id, _at(s.time_min), s.occupied, s.wake) for s in raw.slots)
+    times = [s.time for s in slots]
+    return SafetyView(
+        eta=_at(raw.eta_min), wake_cat=raw.wake, aircraft_size_class=SIZE_RANK[raw.aircraft_category],
+        original_gate_id=world.ground.original_gate,
+        grid_start=min(times) if times else _at(raw.eta_min), grid_end=max(times) if times else _at(raw.eta_min),
+        slots=slots,
+        gates=tuple(Gate(g.gate_id, SIZE_RANK[g.size_class], g.gate_id != REMOTE_GATE_ID,
+                         (g.taxiway,) if g.taxiway else ()) for g in raw.gates),
+        alternates=tuple(Alternate(a.iata, a.time_min) for a in raw.alternates),
+        extra_fuel_min=raw.extra_fuel_min,
+        taxiway_closures=tuple(c.taxiway for c in raw.taxiway_closures),
+        gates_unavailable=tuple(raw.gates_unavailable),
+    )

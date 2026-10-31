@@ -11,7 +11,7 @@ from typing import Any, Union
 
 from cdm import kernel
 from cdm.options import divert_option, landing_option
-from cdm.safety_view import SafetyView, Slot
+from cdm.safety_view import SafetyView, Slot, view_of
 from cdm.schemas import ActionType, Option
 
 
@@ -28,7 +28,7 @@ def _adv(view: SafetyView, name: str, slot: Slot, gate_id: str) -> Option:
 
 
 def kernel_attacks(world: Any) -> list[Attack]:
-    view: SafetyView = world.safety_view
+    view: SafetyView = view_of(world)
     original = view.original_gate_id
     free = [s for s in view.slots if not s.occupied and s.time >= view.eta]
     occupied = [s for s in view.slots if s.occupied]

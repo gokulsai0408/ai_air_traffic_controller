@@ -24,6 +24,7 @@ from cdm.schemas import KernelReport, OpsFacts
 ROLES = ("pilot", "ground", "atc")
 COST_TOLERANCE_USD = 1e-6   # same float-comparison tolerance as the coordinator
 WorldLoader = Callable[[str, int, str], Any]
+_LOADER_NOTES: list[str] = []   # set by default_world_loader, copied into the report
 
 
 @dataclass
@@ -63,12 +64,20 @@ class VerifyReport:
 
 
 def default_world_loader(flight_key: str, seed: int, config_hash: str) -> Any:
-    """Rebuild the world from the flight row. Raises ImportError until A's modules are on the branch."""
-    from cdm.data import load_flights
+    """Rebuild the world from the flight row with the current config."""
+    from cdm.data import load_config, load_flights
     from cdm.world import build_world
 
     flights = load_flights(Path(__file__).resolve().parents[1] / "data" / "flights.csv")
-    return build_world(flights[flights["flight_key"] == flight_key].iloc[0], seed, None)
+    match = flights[flights["flight_key"] == flight_key]
+    if match.empty:
+        raise LookupError(f"flight {flight_key} is not in data/flights.csv")
+    cfg = load_config()
+    world = build_world(match.iloc[0], seed, cfg)
+    if world.config_hash != config_hash:
+        _LOADER_NOTES.append(f"config hash is now {world.config_hash} but the run logged {config_hash}: "
+                             "the replay used today's config, so a difference may be a config change")
+    return world
 
 
 def _of_type(entries: list[dict[str, Any]], entry_type: str) -> list[dict[str, Any]]:
@@ -309,6 +318,7 @@ def verify(path: str | Path, world_loader: WorldLoader = default_world_loader) -
         return report
 
     genesis = entries[0]["payload"]
+    _LOADER_NOTES.clear()
     try:
         world = world_loader(genesis["flight_key"], genesis["seed"], genesis["config_hash"])
     except ImportError as exc:
@@ -318,6 +328,7 @@ def verify(path: str | Path, world_loader: WorldLoader = default_world_loader) -
         world = None
         report.problems.append(f"world rebuild failed: {type(exc).__name__}: {exc}")
 
+    report.problems += _LOADER_NOTES
     try:
         if world is None:
             report.kernel_skipped = True

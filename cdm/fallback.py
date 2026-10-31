@@ -6,7 +6,7 @@ from typing import Any, Iterable, Optional
 
 from cdm import kernel
 from cdm.options import divert_option, free_slots_from_eta, landing_option
-from cdm.safety_view import REMOTE_GATE_ID, SafetyView, Slot
+from cdm.safety_view import REMOTE_GATE_ID, SafetyView, Slot, view_of
 from cdm.schemas import CClass, ConstraintResult, KernelReport, Option
 
 FALLBACK_ID = "FB-000"
@@ -32,7 +32,7 @@ def _first_usable_gate(slot: Slot, view: SafetyView, world: Any) -> str:
 
 def fallback_plan(world: Any) -> Option:
     """Always returns an Option. Run it through check(): an unsafe result triggers escalation."""
-    view: SafetyView = world.safety_view
+    view: SafetyView = view_of(world)
     alternates = sorted(view.alternates, key=lambda a: (a.minutes_to, a.iata))
     slot = _first_wake_legal_slot(view)
 

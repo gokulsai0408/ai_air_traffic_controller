@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 from typing import Any, Optional
 
-from cdm.safety_view import Gate, SafetyView, Slot
+from cdm.safety_view import Gate, SafetyView, Slot, view_of
 from cdm.schemas import ActionType, Option
 
 MAX_SEED_SLOTS = 6
@@ -44,7 +44,7 @@ def free_slots_from_eta(view: SafetyView) -> list[Slot]:
 
 def do_nothing(world: Any) -> Option:
     """FCFS baseline: original gate, first free slot >= ETA, no coordination."""
-    view: SafetyView = world.safety_view
+    view: SafetyView = view_of(world)
     free = free_slots_from_eta(view)
     return landing_option("DN-000", free[0] if free else None, view.original_gate_id, view, proposed_by="do_nothing")
 
@@ -71,7 +71,7 @@ def seed_options(world: Any) -> list[Option]:
     Not filtered for safety or policy: the kernel decides, and escalation needs the
     options that only fail on policy.
     """
-    view: SafetyView = world.safety_view
+    view: SafetyView = view_of(world)
     options: list[Option] = []
     for slot in _spread(free_slots_from_eta(view)):
         for gate in _seed_gates(view):
